@@ -1,0 +1,86 @@
+name: Android startup smoke
+
+on:
+  workflow_run:
+    workflows: [Build Pocket Korean]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Build Pocket Korean run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        (
+          github.event.workflow_run.event == 'push' ||
+          github.event.workflow_run.event == 'workflow_dispatch'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id || inputs.build_run_id }}
+      SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download the completed build
+        uses: actions/download-artifact@v4
+        with:
+          name: Pocket-Korean-Android
+          path: ${{ runner.temp }}/apk
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Check whether this is a debug build
+        id: build_type
+        run: |
+          test -f "$RUNNER_TEMP/apk/BUILD-TYPE.txt"
+          if rg -q '^Disposable debug signing\.' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"; then
+            echo 'debug=true' >> "$GITHUB_OUTPUT"
+          else
+            rg -q '^Stable signing from' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"
+            echo 'debug=false' >> "$GITHUB_OUTPUT"
+            echo 'Smoke test not run: this gate requires a debug WebView. The stable release APK was not tested by this gate.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Enable KVM
+        if: steps.build_type.outputs.debug == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start the emulator and check the installed app
+        if: steps.build_type.outputs.debug == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 420
+          script: node tests/android-smoke.mjs "$RUNNER_TEMP/apk/Pocket-Korean.apk" android-smoke
+      - name: Save emulator evidence
+        if: always() && steps.build_type.outputs.debug == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-startup-smoke-${{ env.SOURCE_RUN_ID }}
+          path: android-smoke/
+          if-no-files-found: ignore
+          retention-days: 30

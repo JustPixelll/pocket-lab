@@ -4,6 +4,7 @@ app/build/
 local.properties
 node_modules/
 test-results/
+android-smoke/
 *.apk
 *.aab
 *.hprof
