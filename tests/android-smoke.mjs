@@ -395,6 +395,13 @@ try {
   report.launch = launch.stdout;
   assert.match(launch.stdout, /Status:\s*ok/, 'Android did not report a successful Activity launch');
 
+  // The API 35 fixture also showed a Pixel Launcher ANR over the running app.
+  // Stop only that observed background package, after Pocket Korean is launched.
+  const launcherPackage = 'com.google.android.apps.nexuslauncher';
+  await checkpoint('stop-background-launcher',
+    () => adb(['shell', 'am', 'force-stop', launcherPackage]));
+  report.emulatorFixture.forceStoppedPackages.push(launcherPackage);
+
   const pid = await until('Application process', async () => {
     const result = await adb(['shell', 'pidof', packageName]);
     return result.stdout.trim().split(/\s+/)[0] || null;
