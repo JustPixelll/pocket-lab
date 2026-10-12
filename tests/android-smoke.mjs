@@ -278,6 +278,27 @@ async function physicalScreenshot(name) {
   return bytes;
 }
 
+async function passivePhysicalSample(phase, domReadyAt, offsetMs) {
+  const label = phase + '-' + offsetMs / 1000 + 's';
+  const sample = {
+    phase, requestedOffsetMs: offsetMs,
+    domReadyAt: new Date(domReadyAt).toISOString(),
+    requestedAt: new Date(domReadyAt + offsetMs).toISOString(),
+  };
+  (report.presentation.passiveSamples ||= []).push(sample);
+  // A bounded observation window, not a readiness gate or a redraw request.
+  // If an earlier capture runs long, record the actual time instead of adding delay.
+  await checkpoint('passive-wait:' + label,
+    () => delay(Math.max(0, domReadyAt + offsetMs - Date.now())));
+  const startedAt = Date.now();
+  sample.captureStartedAt = new Date(startedAt).toISOString();
+  sample.actualOffsetMs = startedAt - domReadyAt;
+  await physicalScreenshot('physical-' + label + '.png');
+  await capture('gfxinfo-' + label + '.txt',
+    ['shell', 'dumpsys', 'gfxinfo', packageName, 'framestats']);
+  sample.finishedAt = new Date().toISOString();
+}
+
 async function rendererScreenshot(name) {
   try {
     await checkpoint('cdp:' + name, async () => {
@@ -414,10 +435,15 @@ try {
       ? state : null;
   }));
   assert.equal(report.ui.title, 'Pocket Korean');
+  const homeDomReadyAt = Date.now();
+  report.presentation.homeDomReadyAt = new Date(homeDomReadyAt).toISOString();
 
   // Preserve the Android surface before any screenshot request to Chromium,
   // accessibility inspection, or diagnostic input can change presentation.
   await physicalScreenshot('physical-before.png');
+  // Observe whether ordinary pending frames reach Android without a CDP PNG.
+  await passivePhysicalSample('home', homeDomReadyAt, 5000);
+  await passivePhysicalSample('home', homeDomReadyAt, 15000);
   await capture('power-before-input.txt', ['shell', 'dumpsys', 'power']);
   await capture('display-before-input.txt', ['shell', 'dumpsys', 'display']);
   const dispatchStartedAt = Date.now();
@@ -478,9 +504,13 @@ try {
         ? state : null;
     }));
     report.wordsTap.status = 'route_changed';
+    const wordsDomReadyAt = Date.now();
+    report.presentation.wordsDomReadyAt = new Date(wordsDomReadyAt).toISOString();
     // Capture the result of actual Android input before asking Chromium for pixels.
     await physicalScreenshot('physical-after-tap.png');
     await capture('gfxinfo-after-tap.txt', ['shell', 'dumpsys', 'gfxinfo', packageName, 'framestats']);
+    await passivePhysicalSample('words', wordsDomReadyAt, 3000);
+    await passivePhysicalSample('words', wordsDomReadyAt, 10000);
     await rendererScreenshot('renderer-words.png');
   }
 
