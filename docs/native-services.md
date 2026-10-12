@@ -68,6 +68,16 @@ TTS initialization independently emits `capabilities` when its provider responds
 - Ink returns up to five text candidates. It does not grade penmanship or stroke
   correctness. Translation is a suggestion and does not establish the sole valid
   answer to a language exercise.
+- Standalone handwriting uses an explicitly empty `preContext` and the supplied
+  writing-area dimensions. ML Kit 19.0.0 requires the pre-context field when
+  building `RecognitionContext`; omitting it throws before recognition begins.
+  The exercise's expected answer is never sent as recognition context.
+- Handwriting setup failures return `INK_SETUP_FAILED`; service-start or inference
+  failures return `INK_RECOGNITION_FAILED`. These are service errors, not a grade
+  of the drawing. An absent prepared model still returns `MODEL_REQUIRED`.
+  Retry a service failure, then use explicit model preparation if it persists;
+  reopen the app for a setup failure. No exception messages or SDK debug payloads
+  are exposed to the page.
 - Native file reads/writes are bounded at 4 MiB. Import removes a UTF-8 BOM and
   rejects malformed UTF-8. The JavaScript application must validate the backup
   schema and request confirmation before replacing existing learner data.
@@ -81,11 +91,16 @@ The microphone settings option opens this app's Android permission settings.
 
 On Android 12/API 31+, an available on-device recognizer is preferred. If the
 requested language is unsupported or its local model is missing, the bridge tries
-the installed default recognizer. On older Android versions it uses the default
-recognizer directly. The offline preference is forwarded, but Android documents
-that providers can ignore it. Events disclose whether the selected recognizer is
-the on-device service or could use a network service. The app should explain this
-before voice use; it must not promise that all speech stays offline.
+the installed default recognizer once, with the offline preference cleared for
+that language-error retry. This allows the default provider to use an available
+network engine when its offline Korean model is missing. It does not download a
+speech model. On older Android versions the default recognizer is used directly
+with the requested offline preference. Other fallback paths also preserve that
+preference. Android documents that providers can ignore it. Events disclose
+whether the selected recognizer is the on-device service or could use a network
+service. The app should explain this before voice use; it must not promise that
+all speech stays offline. `SPEECH_MODEL_REQUIRED` or `LANGUAGE_NOT_SUPPORTED` after
+the retry still means the selected speech provider needs language setup.
 
 Recognition returns what the service heard. It is not a pronunciation assessment.
 The UI should show the transcript and let the learner accept it before checking
@@ -96,6 +111,11 @@ If no such voice is available, it uses the configured provider's default for tha
 language and reports `mayUseNetwork`. Missing language data produces
 `VOICE_REQUIRED`. Speaking while recording is rejected; starting a recording
 stops existing TTS playback.
+
+`koreanVoiceAvailable` and `englishVoiceAvailable` query the initialized TTS
+provider for each locale. `ttsReady` alone means the provider initialized, not
+that a Korean voice is installed. Likewise, `onDeviceSpeechAvailable` describes
+the recognizer service and does not assert that either language model is present.
 
 ## Lifecycle, files, and navigation
 
@@ -141,6 +161,7 @@ response; the setting does not prevent WebViewAssetLoader from serving assets.
 - [Digital ink recognition for Android](https://developers.google.com/ml-kit/vision/digital-ink-recognition/android)
 - [Digital ink language models](https://developers.google.com/ml-kit/vision/digital-ink-recognition/base-models)
 - [Ink 19 recognizer API](https://developers.google.com/android/reference/com/google/mlkit/vision/digitalink/recognition/DigitalInkRecognizer)
+- [Ink recognition-context builder](https://developers.google.com/android/reference/com/google/mlkit/vision/digitalink/recognition/RecognitionContext.Builder)
 - [Ink result candidate API](https://developers.google.com/android/reference/com/google/mlkit/vision/digitalink/common/RecognitionCandidate)
 - [SpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer)
 - [RecognizerIntent](https://developer.android.com/reference/android/speech/RecognizerIntent)

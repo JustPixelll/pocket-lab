@@ -1,6 +1,6 @@
 # Adaptive vocabulary engine
 
-`app/src/main/assets/engine.js` is a dependency-free ES module. It owns local vocabulary, review history, lesson completion, simple settings, and backup merge. Native speech recognition and the visual interface are separate.
+`app/src/main/assets/engine.js` is a dependency-free ES module. It owns local vocabulary, review history, lesson completion, the character and earned coins, simple settings, and backup merge. Native speech recognition and the visual interface are separate. Cosmetic definitions live in `app/src/main/assets/data/customization.js`.
 
 ## What the colors mean
 
@@ -79,14 +79,18 @@ if (next) {
 | `updateCard(id, patch)` | Corrected metadata with the same review history. Korean spelling and card IDs are immutable; meaning, aliases, pronunciation, examples, notes and provenance can be edited. |
 | `selectNext({ direction, lastCardId })` | `{ card, direction }`, or `null` for an empty vocabulary. Direction defaults to `mixed`. |
 | `evaluateAnswer(card, direction, text)` | `{ correct, normalized, expected }`; also available as a named export. |
-| `recordAttempt(id, direction, result)` | `{ card, correct, credited, status, eventId }` after persistence succeeds. |
+| `recordAttempt(id, direction, result)` | `{ card, correct, credited, status, eventId, coinsEarned, rewards }` after persistence succeeds. |
 | `getStats()` | `{ total, new, learning, mastered, due, dueDirections, today, streak }`. `due` counts cards; `dueDirections` counts their directions. |
 | `getDailyStats()` | Calendar date keys mapping to `{ attempts, correct, assisted, lessons }`. |
-| `completeLesson(id)` / `recordLesson(id)` | Saved `{ id, completed, completedAt, firstCompletedAt, lastCompletedAt, completions }`. |
+| `completeLesson(id)` / `recordLesson(id)` | Saved `{ id, completed, completedAt, firstCompletedAt, lastCompletedAt, completions, coinsEarned, rewards }`. |
 | `getLessonProgress()` | Object keyed by lesson ID, using the completion records above. |
 | `getSettings()` / `setSettings(patch)` | Fresh copy of the saved flat settings object. |
+| `getProfile()` | Fresh character, balance, owned-item, equipment, purchase, and achievement view; see below. |
+| `buyItem(itemId)` | Atomically buys and equips the item; returns `{ purchased, spent, item, profile }`. An owned/free item costs zero. |
+| `equipItem(itemId)` | Equips an owned item in its catalogue slot and returns the updated profile. |
+| `setCharacterName(name)` | Saves a nonempty name of at most 24 Unicode code points and returns the profile. Names are plain text; the UI must escape them. |
 | `exportData()` | Complete, formatted JSON backup string. |
-| `importData(jsonOrObject)` | Merges and returns `{ added, merged, total }`; never clears the current vocabulary. |
+| `importData(jsonOrObject)` | Merges and returns `{ added, merged, total }`, plus `coinDebt` only if positive; never clears the current vocabulary. |
 
 `createStore` also accepts `now`, `random` (or `rng`), `idFactory`, and `timeZone` options for deterministic checks and controlled environments. The normal app uses the phone's clock, random generator, and local calendar timezone. Streaks count any recorded review or lesson activity. Yesterday's streak stays visible before today's first practice and expires if a whole additional day is missed.
 
@@ -118,14 +122,65 @@ Only `starter: true` entries are seeded, and only when the storage key is genuin
 
 ## Persistence, recovery and imports
 
-Schema version 1 contains `cards`, uniquely identified review and lesson `history`, `settings`, `settingsUpdatedAt`, `createdAt`, and `updatedAt`. Exported card progress and `lessonProgress` are convenient derived views; review and lesson events remain authoritative.
+Schema version 2 contains `cards`, uniquely identified review and lesson `history`, `profile`, `settings`, `settingsUpdatedAt`, `createdAt`, and `updatedAt`. Exported card progress and `lessonProgress` are convenient derived views; review and lesson events remain authoritative for vocabulary progress.
+
+The storage key stays **`pocketLabKorean.v1`**. A version-1 notebook or backup is supported and gains a default character plus achievement receipts recovered by replaying its full history. Vocabulary, original lesson IDs, review events, settings, and completion counts are retained. Migration is persisted in one write before the store is returned; a failed migration leaves the old saved bytes intact and throws `StorageError`, so it can be retried. A version-2 backup requires the updated app; unsupported versions fail without resetting data.
 
 Each mutation constructs and validates its next state, saves one JSON value through the synchronous storage adapter, and only then exposes the change to the UI. A failed write throws `StorageError` and leaves the previous live and persisted state unchanged. Callers should show the error and offer the existing backup export; they must not show the attempted change as successfully saved. Corrupt saved data throws `ValidationError`; it is not silently replaced or reseeded. Invalid imports are rejected before any write.
 
 Backup import merges vocabulary by ID and then by normalized Korean/English identity. It remaps histories when duplicate words have different IDs, keeps existing cards, and merges unique event IDs. Reimporting the same backup does not inflate counts. A stale backup cannot erase a more recent failure. A newer failure from a second copy legitimately demotes the recomputed result. Conflicting event IDs and reused card IDs with different meanings cause the whole import to fail safely. Deliberately changed settings use their saved modification timestamp, so a fresh installation can restore old preferences while newer local preferences survive an old import.
 
-The full event log is retained rather than silently truncating evidence. Very large histories can eventually reach the WebView storage quota; failed saves remain visible and recoverable. The initial app should offer backup export. This first schema is intended for personal use and ordinary phone-clock behavior, not adversarial score verification or concurrent real-time synchronization across devices.
+The full event log is retained rather than silently truncating evidence. Very large histories can eventually reach the WebView storage quota; failed saves remain visible and recoverable. The app offers backup export. This schema is intended for personal use and ordinary phone-clock behavior, not adversarial score verification or concurrent real-time synchronization across devices.
+
+## Character, coin rewards, and the shop
+
+Coins are earned through learning. There are no currency purchases, random rewards, or cosmetic bonuses to vocabulary scores.
+
+| Achievement | Coins | Repetition |
+| --- | --- | --- |
+| First completion of a lesson/quest ID | 20 | Replays still count as lesson activity, but earn no additional coins. |
+| First time a vocabulary card reaches green in both directions | 10 | Losing and regaining green earns no further coins. |
+
+Each qualifying event and its reward are saved together. `recordAttempt()` and `completeLesson()` preserve their existing result fields and additionally return `coinsEarned` and `rewards`. Each new reward is `{ type: 'lesson' | 'mastery', targetId, at, coins }`. When nothing new was earned, `coinsEarned` is zero and `rewards` is an empty array. A failed write does not grant a reward or advance learning. `coinsEarned` denotes newly earned coins; a merged-backup adjustment described below can absorb them before they become spendable.
+
+Reward receipts are permanent local records keyed by lesson ID or canonical saved card ID. Full review-history replay discovers the first historical green result, even if the word is yellow today. Receipts are retained after subsequent lapses, and when merging another device's earlier reviews changes the reconstructed timeline. This preserves an achievement already earned. Combining partial histories can also establish a first historical mastery, which is credited once.
+
+### Profile returned to the interface
+
+```js
+{
+  characterName: '콩이',
+  coins: 10,                 // Spendable; never negative.
+  coinDebt: 0,               // Normally zero; see forked-backup spending below.
+  totalEarned: 30,
+  totalSpent: 20,
+  ownedItems: ['hat-none', 'hat-beanie', 'outfit-tee', 'body-cream', 'body-sand', 'body-cocoa'],
+  equipment: { hat: 'hat-beanie', outfit: 'outfit-tee', body: 'body-cream' },
+  rewards: { lessonIds: ['first-hello'], masteredCardIds: ['sleep'] },
+  purchases: [{ itemId: 'hat-beanie', price: 20, at: 1792152000000 }],
+}
+```
+
+The saved profile also keeps a timestamp for the name, a separate timestamp for each equipment slot, and dated achievement receipts. `coins`, `totalEarned`, `totalSpent`, and `ownedItems` in an export are derived display values; importing edited display values does not create currency or ownership. All profile getters return fresh values.
+
+`buyItem()` validates the item and available balance before writing. Acquisition, the purchase receipt, and equipment are one atomic change. Buying an already owned item only equips it for zero coins. Equipping the currently worn item or setting the existing name is a no-op. Unowned items, unknown IDs, insufficient funds, unsupported names, and invalid backup receipts fail without changing the notebook.
+
+### Catalogue and drawing contract
+
+`customization.js` exports `COSMETICS`, `COSMETIC_BY_ID`, `COSMETIC_SLOTS`, `DEFAULT_EQUIPMENT`, and `DEFAULT_CHARACTER_NAME`. Every item has `{ id, slot, name, price, style, color, accent }`; colors are six-digit hex strings suitable for the SVG renderer. Slots are `hat`, `outfit`, and `body`.
+
+- Hats: `hat-none` (free), `hat-beanie` (20), `hat-cap` (30), `hat-wizard` (80), `hat-flower-crown` (60). Styles are `none`, `beanie`, `cap`, `wizard`, and `flower-crown`.
+- Outfits: `outfit-tee` (free), `outfit-scarf` (20), `outfit-hoodie` (40), and `outfit-cape` (60), with the corresponding `tee`, `scarf`, `hoodie`, and `cape` styles.
+- Body colors: `body-cream`, `body-sand`, and `body-cocoa` are free; `body-mint` and `body-peach` cost 20, and `body-lavender` costs 30. All use `solid`.
+
+All free choices are owned immediately. The default equipment is no hat, the everyday tee, and warm cream. Catalogue IDs and shipped prices are part of purchase receipts and must remain stable; changing their meaning or price requires an explicit migration or a new item ID.
+
+### Merging character backups
+
+Imports union achievement receipts and purchases by their semantic IDs. Matching vocabulary with different saved IDs has its mastery receipt remapped along with its reviews, so it earns one reward. Two copies that both bought the same item produce one owned item and one charge. Newer names and each newer equipment-slot choice win independently; equal timestamps use a deterministic lexical tie-break. An older backup cannot remove purchases or replace a newer appearance choice. Repeating an import makes no additional change.
+
+Two offline copies can spend the same previously earned coins on different items. The merge retains both inventories and all learning progress, deduplicates the common earnings, and records the difference as `coinDebt`. Available `coins` remains `max(0, totalEarned - totalSpent)`. Future learning rewards cover that difference before producing a spendable balance. For example, two copies each spend the same 20-coin quest reward on different 20-coin items: the merged notebook owns both, has zero spendable coins, and has a 20-coin adjustment. The next new quest clears that adjustment; it does not award a second copy of the original reward. The interface can explain this using `getProfile().coinDebt` or the positive `coinDebt` returned by import. Ordinary use of one notebook cannot create this adjustment.
 
 ## Verification
 
-Run `node --test tests/engine.test.js` from the repository root. The checks cover both-direction mastery, elapsed-time protection, lapses, safe transcript handling, conservative answer variants, adaptive selection, saved-state isolation, corruption, write failures, backup merge and deduplication, and local-calendar streaks.
+Run `node --test tests/engine.test.js` from the repository root. The checks cover both-direction mastery, elapsed-time protection, lapses, safe transcript handling, conservative answer variants, adaptive selection, saved-state isolation, corruption, write failures, backup merge and deduplication, and local-calendar streaks. Character tests cover historical version-1 migration, one-time rewards, failed reward/purchase saves, ownership and equipment, repeat purchases/imports, canonical-card reward deduplication, name validation, and forked-backup spending without lost inventory or negative available coins.

@@ -6,13 +6,18 @@
  * here: a confirmed speech transcript is checked as vocabulary recall.
  */
 
-export const SCHEMA_VERSION = 1;
+import { COSMETICS, COSMETIC_BY_ID, COSMETIC_SLOTS, DEFAULT_EQUIPMENT,
+  DEFAULT_CHARACTER_NAME } from './data/customization.js';
+
+export const SCHEMA_VERSION = 2;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const CREDIT_GAP_MS = 20 * 60 * 60 * 1000;
 export const MASTERY_SPAN_MS = 4 * DAY_MS;
 export const RETRY_DELAY_MS = 10 * 60 * 1000;
 export const DIRECTIONS = Object.freeze(['enToKo', 'koToEn']);
 export const REVIEW_INTERVALS_DAYS = Object.freeze([0, 1, 3, 7, 14, 30]);
+export const REWARD_COINS = Object.freeze({ lesson: 20, mastery: 10 });
+export const CHARACTER_NAME_LIMIT = 24;
 
 const DEFAULT_KEY = 'pocketLabKorean.v1';
 const MAX_CARDS = 10000;
@@ -226,13 +231,140 @@ function orderedEvents(events) {
   return [...events].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id, 'en'));
 }
 
+function cosmetic(id) {
+  const key = identifier(id, 'Cosmetic item');
+  if (!own(COSMETIC_BY_ID, key)) fail('That cosmetic item does not exist.');
+  return COSMETIC_BY_ID[key];
+}
+
+function characterName(value) {
+  const name = textValue(value, 'Character name', { max: 200 });
+  if (/\p{Cc}/u.test(name) || [...name].length > CHARACTER_NAME_LIMIT) {
+    fail(`Use a character name of at most ${CHARACTER_NAME_LIMIT} characters, on one line.`);
+  }
+  return name;
+}
+
+function initialProfile() {
+  return { characterName: DEFAULT_CHARACTER_NAME, nameUpdatedAt: 0,
+    equipment: { ...DEFAULT_EQUIPMENT },
+    equipmentUpdatedAt: Object.fromEntries(COSMETIC_SLOTS.map(slot => [slot, 0])),
+    purchases: [], rewards: { lessons: [], mastery: [] } };
+}
+
+function mergeReceipts(first, second, key) {
+  const receipts = new Map();
+  for (const receipt of [...first, ...second]) {
+    const existing = receipts.get(receipt[key]);
+    if (!existing || receipt.at < existing.at) receipts.set(receipt[key], { ...receipt });
+  }
+  return [...receipts.values()].sort((a, b) => a[key].localeCompare(b[key], 'en'));
+}
+
+function validateProfile(input, cardIds, lessonIds) {
+  assertObject(input, 'Character profile');
+  assertObject(input.equipment, 'Equipped cosmetics');
+  assertObject(input.equipmentUpdatedAt, 'Equipment dates');
+  assertObject(input.rewards, 'Achievement rewards');
+  if (!Array.isArray(input.purchases) || input.purchases.length > COSMETICS.length) fail('The purchase history is invalid.');
+  const purchases = input.purchases.map(receipt => {
+    assertObject(receipt, 'Purchase receipt');
+    const item = cosmetic(receipt.itemId);
+    if (item.price === 0 || receipt.price !== item.price) fail('A purchase receipt has an invalid price.');
+    return { itemId: item.id, price: item.price, at: timestamp(receipt.at, 'Purchase date') };
+  });
+  if (new Set(purchases.map(receipt => receipt.itemId)).size !== purchases.length) fail('The backup has duplicate purchases.');
+  const owned = new Set([...COSMETICS.filter(item => item.price === 0).map(item => item.id),
+    ...purchases.map(receipt => receipt.itemId)]);
+  for (const slot of [...Object.keys(input.equipment), ...Object.keys(input.equipmentUpdatedAt)]) {
+    if (!COSMETIC_SLOTS.includes(slot)) fail('The backup has an unknown character equipment slot.');
+  }
+  const equipment = {};
+  const equipmentUpdatedAt = {};
+  for (const slot of COSMETIC_SLOTS) {
+    const item = cosmetic(input.equipment[slot]);
+    if (item.slot !== slot || !owned.has(item.id)) fail('The backup equips an unavailable cosmetic item.');
+    equipment[slot] = item.id;
+    equipmentUpdatedAt[slot] = timestamp(input.equipmentUpdatedAt[slot], 'Equipment date');
+  }
+  function claims(value, key, validIds) {
+    if (!Array.isArray(value) || value.length > validIds.size) fail('The achievement reward list is invalid.');
+    const result = value.map(receipt => {
+      assertObject(receipt, 'Achievement receipt');
+      const id = identifier(receipt[key], 'Reward target');
+      if (!validIds.has(id)) fail('An achievement reward references missing learning history.');
+      return { [key]: id, at: timestamp(receipt.at, 'Achievement date') };
+    });
+    if (new Set(result.map(receipt => receipt[key])).size !== result.length) fail('The backup has duplicate achievement rewards.');
+    return mergeReceipts([], result, key);
+  }
+  return { characterName: characterName(input.characterName),
+    nameUpdatedAt: timestamp(input.nameUpdatedAt, 'Character name date'), equipment, equipmentUpdatedAt,
+    purchases: mergeReceipts([], purchases, 'itemId'),
+    rewards: { lessons: claims(input.rewards.lessons, 'lessonId', lessonIds),
+      mastery: claims(input.rewards.mastery, 'cardId', cardIds) } };
+}
+
+function synchronizeRewards(profile, achievements) {
+  return { ...profile, rewards: {
+    lessons: mergeReceipts(profile.rewards.lessons, achievements.lessons, 'lessonId'),
+    mastery: mergeReceipts(profile.rewards.mastery, achievements.mastery, 'cardId'),
+  } };
+}
+
+function profileView(profile) {
+  const totalEarned = profile.rewards.lessons.length * REWARD_COINS.lesson
+    + profile.rewards.mastery.length * REWARD_COINS.mastery;
+  const totalSpent = profile.purchases.reduce((sum, purchase) => sum + purchase.price, 0);
+  const bought = new Set(profile.purchases.map(purchase => purchase.itemId));
+  return { characterName: profile.characterName, coins: Math.max(0, totalEarned - totalSpent),
+    coinDebt: Math.max(0, totalSpent - totalEarned), totalEarned, totalSpent,
+    ownedItems: COSMETICS.filter(item => item.price === 0 || bought.has(item.id)).map(item => item.id),
+    equipment: { ...profile.equipment }, purchases: copy(profile.purchases),
+    rewards: { lessonIds: profile.rewards.lessons.map(receipt => receipt.lessonId),
+      masteredCardIds: profile.rewards.mastery.map(receipt => receipt.cardId) } };
+}
+
+function newRewards(before, after) {
+  const result = [];
+  for (const [list, key, type] of [['lessons', 'lessonId', 'lesson'], ['mastery', 'cardId', 'mastery']]) {
+    const existing = new Set(before.rewards[list].map(receipt => receipt[key]));
+    for (const receipt of after.rewards[list]) {
+      if (!existing.has(receipt[key])) result.push({ type, targetId: receipt[key], at: receipt.at, coins: REWARD_COINS[type] });
+    }
+  }
+  return { coinsEarned: result.reduce((sum, reward) => sum + reward.coins, 0), rewards: result };
+}
+
+function mergeProfiles(existing, incoming, importedIds) {
+  const prefer = (oldValue, oldAt, newValue, newAt) => newAt > oldAt || (newAt === oldAt && newValue > oldValue);
+  const nameFromIncoming = prefer(existing.characterName, existing.nameUpdatedAt,
+    incoming.characterName, incoming.nameUpdatedAt);
+  const equipment = {};
+  const equipmentUpdatedAt = {};
+  for (const slot of COSMETIC_SLOTS) {
+    const useIncoming = prefer(existing.equipment[slot], existing.equipmentUpdatedAt[slot],
+      incoming.equipment[slot], incoming.equipmentUpdatedAt[slot]);
+    equipment[slot] = (useIncoming ? incoming : existing).equipment[slot];
+    equipmentUpdatedAt[slot] = Math.max(existing.equipmentUpdatedAt[slot], incoming.equipmentUpdatedAt[slot]);
+  }
+  return { characterName: (nameFromIncoming ? incoming : existing).characterName,
+    nameUpdatedAt: Math.max(existing.nameUpdatedAt, incoming.nameUpdatedAt), equipment, equipmentUpdatedAt,
+    purchases: mergeReceipts(existing.purchases, incoming.purchases, 'itemId'),
+    rewards: {
+      lessons: mergeReceipts(existing.rewards.lessons, incoming.rewards.lessons, 'lessonId'),
+      mastery: mergeReceipts(existing.rewards.mastery, incoming.rewards.mastery.map(receipt =>
+        ({ ...receipt, cardId: importedIds.get(receipt.cardId) })), 'cardId'),
+    } };
+}
+
 function parseSnapshot(value) {
   let input = value;
   if (typeof input === 'string') {
     try { input = JSON.parse(input); } catch { fail('This backup is not valid JSON. Your existing data has not changed.'); }
   }
   assertObject(input, 'Backup');
-  if (input.schemaVersion !== SCHEMA_VERSION) fail('This backup uses an unsupported schema version. Your existing data has not changed.');
+  if (![1, SCHEMA_VERSION].includes(input.schemaVersion)) fail('This backup uses an unsupported schema version. Your existing data has not changed.');
   if (!Array.isArray(input.cards) || input.cards.length > MAX_CARDS) fail('The backup vocabulary list is invalid or too large.');
   if (!Array.isArray(input.history)) fail('The backup is missing its learning history.');
   const cards = input.cards.map((card) => metadata(card, 0, { imported: true }));
@@ -240,7 +372,9 @@ function parseSnapshot(value) {
   if (cardIds.size !== cards.length) fail('The backup has duplicate card IDs.');
   const history = input.history.map((event) => reviewEvent(event, cardIds));
   if (new Set(history.map((event) => event.id)).size !== history.length) fail('The backup has duplicate history event IDs.');
-  return { schemaVersion: SCHEMA_VERSION, cards, history: orderedEvents(history),
+  const lessonIds = new Set(history.filter(event => event.type === 'lesson').map(event => event.lessonId));
+  return { schemaVersion: input.schemaVersion, cards, history: orderedEvents(history),
+    profile: input.schemaVersion === 1 ? initialProfile() : validateProfile(input.profile, cardIds, lessonIds),
     settings: { ...DEFAULT_SETTINGS, ...validateSettings(input.settings ?? {}) },
     settingsUpdatedAt: timestamp(input.settingsUpdatedAt ?? 0, 'Settings updatedAt'),
     createdAt: timestamp(input.createdAt, 'Store createdAt'), updatedAt: timestamp(input.updatedAt, 'Store updatedAt') };
@@ -251,10 +385,14 @@ function derive(state) {
     enToKo: initialProgress(card.addedAt), koToEn: initialProgress(card.addedAt),
   }]));
   const lessons = {};
+  const firstMastery = new Map();
   for (const event of state.history) {
     if (event.type === 'attempt') {
       const card = progress.get(event.cardId);
       card[event.direction] = applyReview(card[event.direction], event);
+      if (!firstMastery.has(event.cardId) && getCardStatus({ progress: card }) === 'mastered') {
+        firstMastery.set(event.cardId, { cardId: event.cardId, at: event.at });
+      }
     } else {
       const previous = lessons[event.lessonId];
       lessons[event.lessonId] = { id: event.lessonId, completed: true,
@@ -263,11 +401,16 @@ function derive(state) {
         lastCompletedAt: event.at, completions: (previous?.completions ?? 0) + 1 };
     }
   }
-  return { progress, lessons };
+  return { progress, lessons, achievements: {
+    lessons: Object.values(lessons).map(lesson => ({ lessonId: lesson.id, at: lesson.firstCompletedAt })),
+    mastery: [...firstMastery.values()],
+  } };
 }
 
 function snapshot(state, derived) {
+  const { coins, coinDebt, totalEarned, totalSpent, ownedItems } = profileView(state.profile);
   return { ...state,
+    profile: { ...state.profile, coins, coinDebt, totalEarned, totalSpent, ownedItems },
     cards: state.cards.map((card) => ({ ...card, progress: copy(derived.progress.get(card.id)) })),
     lessonProgress: copy(derived.lessons),
   };
@@ -320,7 +463,7 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
   let state;
   if (raw === null || raw === undefined) {
     const at = now();
-    state = { schemaVersion: SCHEMA_VERSION, cards: [], history: [], settings: { ...DEFAULT_SETTINGS },
+    state = { schemaVersion: SCHEMA_VERSION, cards: [], history: [], profile: initialProfile(), settings: { ...DEFAULT_SETTINGS },
       settingsUpdatedAt: 0, createdAt: at, updatedAt: at };
     if (options.seed !== undefined && !Array.isArray(options.seed)) fail('Starter vocabulary must be a list.');
     const seed = (options.seed ?? []).filter((card) => card.starter === true);
@@ -330,6 +473,9 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
     state = parseSnapshot(raw);
   }
   let derived = derive(state);
+  const originalProfile = JSON.stringify(state.profile);
+  const needsMigration = state.schemaVersion !== SCHEMA_VERSION;
+  state = { ...state, schemaVersion: SCHEMA_VERSION, profile: synchronizeRewards(state.profile, derived.achievements) };
 
   function persist(next, nextDerived) {
     const serialized = JSON.stringify(snapshot(next, nextDerived));
@@ -343,14 +489,15 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
 
   function commit(next) {
     const nextDerived = derive(next);
+    next = { ...next, schemaVersion: SCHEMA_VERSION, profile: synchronizeRewards(next.profile, nextDerived.achievements) };
     persist(next, nextDerived);
     state = next;
     derived = nextDerived;
   }
 
-  // Persist the first-run marker even with no seed, so reopening an empty store
-  // never silently adds new cards or overwrites a deliberate empty vocabulary.
-  if (raw === null || raw === undefined) persist(state, derived);
+  // Keep the established key. Migrating achievements and the character is one
+  // atomic write; a quota error leaves the old notebook available for retry.
+  if (raw === null || raw === undefined || needsMigration || originalProfile !== JSON.stringify(state.profile)) persist(state, derived);
 
   function cardById(id) {
     const card = state.cards.find((item) => item.id === id);
@@ -364,7 +511,44 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
   }
 
   const getCards = () => state.cards.map((card) => enrich(card, derived.progress.get(card.id)));
+  const getProfile = () => profileView(state.profile);
   const eventTime = () => Math.max(now(), state.history.length ? state.history[state.history.length - 1].at + 1 : 0);
+
+  function equipItem(itemId) {
+    const item = cosmetic(itemId);
+    if (!getProfile().ownedItems.includes(item.id)) fail('Collect this item in the coin shop before wearing it.');
+    if (state.profile.equipment[item.slot] === item.id) return getProfile();
+    const at = Math.max(now(), state.updatedAt + 1, state.profile.equipmentUpdatedAt[item.slot] + 1);
+    const profile = { ...state.profile,
+      equipment: { ...state.profile.equipment, [item.slot]: item.id },
+      equipmentUpdatedAt: { ...state.profile.equipmentUpdatedAt, [item.slot]: at } };
+    commit({ ...state, profile, updatedAt: at });
+    return getProfile();
+  }
+
+  function buyItem(itemId) {
+    const item = cosmetic(itemId);
+    const current = getProfile();
+    if (current.ownedItems.includes(item.id)) {
+      return { purchased: false, spent: 0, item: copy(item), profile: equipItem(item.id) };
+    }
+    if (current.coins < item.price) fail(`${item.name} costs ${item.price} coins. You have ${current.coins}.`);
+    const at = Math.max(now(), state.updatedAt + 1, state.profile.equipmentUpdatedAt[item.slot] + 1);
+    const purchases = mergeReceipts(state.profile.purchases, [{ itemId: item.id, price: item.price, at }], 'itemId');
+    const profile = { ...state.profile, purchases,
+      equipment: { ...state.profile.equipment, [item.slot]: item.id },
+      equipmentUpdatedAt: { ...state.profile.equipmentUpdatedAt, [item.slot]: at } };
+    commit({ ...state, profile, updatedAt: at });
+    return { purchased: true, spent: item.price, item: copy(item), profile: getProfile() };
+  }
+
+  function setCharacterName(value) {
+    const name = characterName(value);
+    if (name === state.profile.characterName) return getProfile();
+    const at = Math.max(now(), state.updatedAt + 1, state.profile.nameUpdatedAt + 1);
+    commit({ ...state, profile: { ...state.profile, characterName: name, nameUpdatedAt: at }, updatedAt: at });
+    return getProfile();
+  }
 
   function addCard(input) {
     const at = now();
@@ -416,12 +600,13 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
       ...(answer !== undefined ? { answer } : {}),
     }, new Set(state.cards.map((item) => item.id)));
     const before = derived.progress.get(cardId)[direction];
+    const previousProfile = state.profile;
     if (state.history.some((item) => item.id === event.id)) fail('A generated review ID already exists. Try again.');
     commit({ ...state, history: [...state.history, event], updatedAt: event.at });
     const updated = getCard(cardId);
     return { card: updated, correct: event.correct && !event.assisted,
       credited: updated.progress[direction].lastCreditAt !== before.lastCreditAt,
-      status: updated.status, eventId: event.id };
+      status: updated.status, eventId: event.id, ...newRewards(previousProfile, state.profile) };
   }
 
   function selectNext({ direction = 'mixed', lastCardId = null } = {}) {
@@ -468,9 +653,10 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
   function completeLesson(lessonId) {
     identifier(lessonId, 'Lesson ID');
     const event = { id: makeId('lesson'), type: 'lesson', at: eventTime(), lessonId };
+    const previousProfile = state.profile;
     if (state.history.some((item) => item.id === event.id)) fail('A generated lesson ID already exists. Try again.');
     commit({ ...state, history: [...state.history, event], updatedAt: event.at });
-    return copy(derived.lessons[lessonId]);
+    return { ...copy(derived.lessons[lessonId]), ...newRewards(previousProfile, state.profile) };
   }
 
   function setSettings(patch) {
@@ -524,6 +710,9 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
 
   function importData(value) {
     const incoming = parseSnapshot(value);
+    // Recover legacy milestones before combining timelines: another device's
+    // earlier lapse must not revoke a reward that was genuinely earned already.
+    incoming.profile = synchronizeRewards(incoming.profile, derive(incoming).achievements);
     const cards = state.cards.map((card) => copy(card));
     const byId = new Map(cards.map((card, index) => [card.id, index]));
     const byIdentity = new Map(cards.map((card) => [identity(card), card.id]));
@@ -563,10 +752,12 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
     const preferIncomingSettings = incoming.settingsUpdatedAt > state.settingsUpdatedAt;
     const settings = preferIncomingSettings ? { ...state.settings, ...incoming.settings } : { ...incoming.settings, ...state.settings };
     const next = { ...state, cards, history: orderedEvents([...events.values()]), settings,
+      profile: mergeProfiles(state.profile, incoming.profile, importedIds),
       settingsUpdatedAt: Math.max(state.settingsUpdatedAt, incoming.settingsUpdatedAt),
       createdAt: Math.min(state.createdAt, incoming.createdAt), updatedAt: Math.max(state.updatedAt, incoming.updatedAt) };
     if (JSON.stringify(next) !== JSON.stringify(state)) commit(next);
-    return { added, merged, total: cards.length };
+    const coinDebt = getProfile().coinDebt;
+    return { added, merged, total: cards.length, ...(coinDebt > 0 ? { coinDebt } : {}) };
   }
 
   return Object.freeze({
@@ -575,6 +766,7 @@ export function createStore(storage = globalThis.localStorage, options = {}) {
     completeLesson, recordLesson: completeLesson,
     getLessonProgress: () => copy(derived.lessons),
     getSettings: () => copy(state.settings), setSettings,
+    getProfile, buyItem, equipItem, setCharacterName,
     exportData: () => JSON.stringify(snapshot(state, derived), null, 2), importData,
   });
 }

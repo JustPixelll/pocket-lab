@@ -1,11 +1,15 @@
 # Pocket Korean project notes
 
-- This is a private personal Android app; all five areas share the same local vocabulary engine.
+- This is a private personal Android app with six areas: Home, Learn, Write, Speak, Words, and Translate. They share the same local learning and character state.
+- Learn contains exactly 10 story quests with a recurring cast and four challenges per quest. Preserve existing quest/lesson IDs and prerequisite progress when editing stories. Every quest includes Korean audio controls for its dialogue and learning material; completing a quest does not grant vocabulary mastery.
+- Home provides the character, coin shop, and wardrobe. Cosmetics affect appearance only. Award 20 coins once per first quest completion and 10 coins once per first-ever green word. Quest replays and demotion/re-mastery must not award more coins. Preserve historical reward receipts, including past mastery followed by demotion, and credit eligible old progress once during migration.
 - Never add romanized Korean vocabulary or romanized pronunciation. Korean sound hints use Hangul; TTS reads normal spelling.
 - Keep dictionary forms separate from polite forms. Speech recognition checks recalled wording, not pronunciation quality.
-- Preserve local vocabulary/review history and backup-merge compatibility. Never reset storage to recover from parse/write errors.
+- Preserve local vocabulary/review history and backup-merge compatibility. Schema 2 must continue reading schema 1 data and use the existing `pocketLabKorean.v1` storage key. Backups include the character, equipment, inventory, reward receipts, and purchase receipts alongside learning progress. Never reset storage to recover from parse/write errors.
+- Keep rewards and purchases idempotent across repeated or older backup imports. Calculate coin balances from receipts; do not trust imported display totals. Retain purchases from both copies after a merge, keep spendable coins nonnegative, and account for any overlapping spending against future rewards. Catalogue IDs and prices are receipt contracts; changing them requires a migration or new IDs. Persist each mutation atomically before updating live state.
 - Do not replace working native services with simulated results. Browser-only previews may clearly explain unavailable Android features.
 - Model downloads must be initiated visibly. No keys or remote backend are needed for existing translation/ink features.
+- Keep **Settings → Korean voice settings** available when Korean audio needs a voice. Guide users to choose a Korean-capable speech engine and install its voice data, then return without losing the quest. Translation/ink model downloads do not install a TTS voice. Microphone permission is for spoken input, not listening.
 - Keep Google translation attribution beside results and in About.
-- Validate changes with the smallest meaningful tests. `npm test` covers recall, status transitions, imports, and curriculum prerequisites. The Android Actions build compiles and lints the native shell.
+- Validate changes with the smallest meaningful tests. `npm test` covers recall, status transitions, imports, curriculum prerequisites, one-time coin rewards, purchases, and migrations. The Android Actions build compiles and lints the native shell. Keep actual build, UI, and device results in `docs/verification.md`; do not infer phone-service success from browser mocks.
 - Never commit or upload a signing key as repository content. Default debug builds have disposable identities. Stable signing uses protected Actions secrets, if the owner configures them. Remind the owner to export a backup before replacing a disposable-key build.

@@ -7,6 +7,50 @@
 
 export const CURRICULUM_VERSION = 1;
 
+/** A reusable fictional cast. Registry IDs stay independent of saved player style. */
+export const CHARACTERS = {
+  townkeeper: {
+    id: 'townkeeper', name: '다온', role: 'Town keeper',
+    bio: 'Keeps spare maps at the welcome desk and likes to make newcomers feel expected. Often has a small, practical errand to talk through.',
+    appearance: {
+      body: '#F5D4B3', outfit: '#477764', outfitStyle: 'scarf', accent: '#E7B563',
+      hat: 'beanie', hatColor: '#365F4F', hatAccent: '#F4DFB3',
+    },
+  },
+  courier: {
+    id: 'courier', name: '하루', role: 'Courier',
+    bio: 'Knows every shortcut but still writes the next route on a little card. Always has time for a quick introduction between deliveries.',
+    appearance: {
+      body: '#EABEA4', outfit: '#5B83B4', outfitStyle: 'hoodie', accent: '#F2C45F',
+      hat: 'cap', hatColor: '#334966', hatAccent: '#F2C45F',
+    },
+  },
+  cook: {
+    id: 'cook', name: '보리', role: 'Café cook',
+    bio: 'Runs the café counter and believes even a tiny adventure deserves a proper snack. Keeps a warm seat ready for another short conversation.',
+    appearance: {
+      body: '#F2D49C', outfit: '#D18B73', outfitStyle: 'tee', accent: '#6B9275',
+      hat: 'beanie', hatColor: '#F6EDD9', hatAccent: '#C77F65',
+    },
+  },
+  bookseller: {
+    id: 'bookseller', name: '소담', role: 'Bookshop owner',
+    bio: 'Keeps a bookshop near the café, with labels on almost everything. Turns everyday questions into reasons to open another book.',
+    appearance: {
+      body: '#D8B6A4', outfit: '#8A77A8', outfitStyle: 'scarf', accent: '#E0C596',
+      hat: 'flower-crown', hatColor: '#486F54', hatAccent: '#E9BE61',
+    },
+  },
+  rival: {
+    id: 'rival', name: '나래', role: 'Friendly rival',
+    bio: 'Loves little games and theatrical hats. Treats practice as a friendly rematch and always checks the supplies first.',
+    appearance: {
+      body: '#D9C1A1', outfit: '#6B9F9A', outfitStyle: 'hoodie', accent: '#EFB577',
+      hat: 'wizard', hatColor: '#775A91', hatAccent: '#F4CE74',
+    },
+  },
+};
+
 export const CURRICULUM_SOURCES = [
   { id: 'dictionary', title: 'National Institute of Korean Language: Korean–English Learners’ Dictionary', url: 'https://krdict.korean.go.kr/eng/mainAction', purpose: 'Dictionary reference for meanings, usage, and pronunciation; examples in this app are authored separately.' },
   { id: 'language-sound', title: 'Dictionary entry: 한국어', url: 'https://krdict.korean.go.kr/eng/dicSearch/SearchView?ParaWordNo=26910', purpose: '한국어 pronunciation and meaning.' },
@@ -268,9 +312,196 @@ const order = (id, prompt, answer, options, explanation, vocabIds, acceptedAnswe
   id, type: 'order', prompt, answer, options, explanation, vocabIds, acceptedAnswers,
 });
 
+// Story text supplies a situation, not an extra quiz answer. Render `after` only
+// after checking a challenge, as a model line rather than a fixed NPC quotation.
+const sceneBeat = (text, ko, en) => ({ text, after: { ko, en } });
+const QUEST_SCENES = {
+  'first-hello': {
+    location: 'Town welcome desk', npcId: 'townkeeper',
+    objective: 'Make a first connection and borrow a little map.',
+    intro: {
+      text: 'The town keeper straightens a stack of maps as your character reaches the welcome desk. There is time for a small conversation before you choose where to go.',
+      ko: '', en: '',
+    },
+    outro: {
+      text: 'A folded map slides across the desk. The town feels a little less unfamiliar, and the keeper gives you a reassuring smile.',
+      ko: '네, 괜찮아요.', en: 'Yes, it is okay.',
+    },
+    steps: [
+      sceneBeat('The keeper looks up. This is your first chance to start the conversation.', '안녕하세요.', 'Hello.'),
+      sceneBeat('A map is waiting for you. Give the exchange a friendly finish.', '감사합니다.', 'Thank you.'),
+      sceneBeat('Before you leave, the keeper gives a short reply. Work out what it means.', '네, 감사합니다.', 'Yes, thank you.'),
+      sceneBeat('Your bag catches the edge of the desk. A small accident needs a polite response.', '죄송해요.', 'I am sorry.'),
+    ],
+  },
+  'name-badge': {
+    location: 'Courier’s corner', npcId: 'courier',
+    objective: 'Help the courier put your introduction on a name badge.',
+    intro: {
+      text: 'The courier is sorting blank name badges next to a bag of letters. A little introduction will help put yours in the right place.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'Your badge has a place on the board. The courier tucks the remaining cards away and waves you onward.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('The courier points to the student line on the badge. Try the introduction that belongs there.', '저는 학생이에요.', 'I am a student.'),
+      sceneBeat('A badge for a friend is next. Choose an ending that fits, then compare it with another introduction.', '저는 니키예요.', 'I am Niki.'),
+      sceneBeat('The next space tells people where you are from. Put the pieces of your introduction together.', '저는 오스트리아 사람이에요.', 'I am Austrian.'),
+      sceneBeat('The courier reads the completed badge aloud. Check the name line before it goes on the board.', '제 이름은 니키예요.', 'My name is Niki.'),
+    ],
+  },
+  'cafe-stop': {
+    location: 'Café counter', npcId: 'cook',
+    objective: 'Place a small order and recognize what another visitor requests.',
+    intro: {
+      text: 'The cook is also looking after the café counter. Your character finds a place beside a warm loaf and a row of cups.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The order is ready. The cook leaves room on the counter for your next visit.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('Start with a simple order before the counter gets busy.', '물 주세요.', 'Water, please.'),
+      sceneBeat('Someone nearby places an order of their own. Work out what they chose.', '우유 주세요.', 'Milk, please.'),
+      sceneBeat('Now place your next order. Put the item and the polite request in a useful order.', '커피 주세요.', 'Coffee, please.'),
+      sceneBeat('There is one more drink label to recognize before you sit down.', '차', 'Tea.'),
+    ],
+  },
+  inventory: {
+    location: 'Town equipment shelf', npcId: 'townkeeper',
+    objective: 'Help the keeper check a practice bag and its equipment.',
+    intro: {
+      text: 'The town keeper has set aside a practice bag and a few pieces of wooden equipment. Your character can help check what is ready.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The keeper puts the list beside the shelf. Everything has a label, including the gaps.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('Check the small item in your character’s hand and report what you have.', '열쇠가 있어요.', 'I have a key.'),
+      sceneBeat('One entry on the list is missing. Read the note before you mark the empty space.', '검이 없어요.', 'I do not have a sword.'),
+      sceneBeat('The next item needs a complete label. Choose the piece that makes the description fit.', '방패가 있어요.', 'I have a shield.'),
+      sceneBeat('Give the keeper one clear update about your own bag.', '저는 열쇠가 있어요.', 'I have a key.'),
+    ],
+  },
+  'find-the-cafe': {
+    location: 'Outside the bookshop', npcId: 'bookseller',
+    objective: 'Find a destination and make sense of a few location notes.',
+    intro: {
+      text: 'The bookshop owner is arranging a small display outside the shop. Your character stops for directions and discovers that everyday objects make a useful little map.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'With the route clear, the bookseller returns to the display. You know where to ask when another question comes along.',
+      ko: '네, 괜찮아요.', en: 'Yes, it is okay.',
+    },
+    steps: [
+      sceneBeat('You have a destination in mind. Ask for the part of the map you still need.', '카페가 어디에 있어요?', 'Where is the café?'),
+      sceneBeat('A note mentions a misplaced item. Read it closely before deciding where to look.', '가방에 열쇠가 있어요.', 'There is a key in the bag.'),
+      sceneBeat('Your character has found the entrance. Put the pieces together to tell someone where it is.', '문이 여기 있어요.', 'The door is here.'),
+      sceneBeat('The bookseller reads a short message from a neighbor. Work out the location in the message.', '집에 있어요.', 'I am at home.'),
+    ],
+  },
+  'lunch-break': {
+    location: 'Café kitchen', npcId: 'cook',
+    objective: 'Describe a few everyday actions during a lunch break.',
+    intro: {
+      text: 'The café counter is quieter now, and the cook has a small lunch break to share. Your character can try a little conversation while the food is still warm.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The cook gathers the plates with a smile. A little conversation has made an ordinary lunch into useful practice.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('Begin with the drink beside the plate. Choose a sentence for the action.', '물을 마셔요.', 'I drink water.'),
+      sceneBeat('Read the next line as if it were your character’s quick lunch update.', '밥을 먹어요.', 'I eat a meal.'),
+      sceneBeat('Write a tiny note about today’s lunch. Keep the action at the end.', '저는 오늘 빵을 먹어요.', 'I eat bread today.'),
+      sceneBeat('The cook is waiting to hear what you thought. Choose a comment that fits.', '빵이 맛있어요.', 'The bread is delicious.'),
+    ],
+  },
+  'small-plan': {
+    location: 'Village postbox', npcId: 'courier',
+    objective: 'Help organize a few short plans and messages.',
+    intro: {
+      text: 'The courier has two route cards on the bench: one for the present trip and one for the next day. Your character helps put a few short updates in the right place.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The route cards are in order. The courier closes the book, and your character has a short plan ready for another day.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('The courier asks you to check the next day’s route before it goes into the bag.', '내일 학교에 가요.', 'I am going to school tomorrow.'),
+      sceneBeat('Make a short update for the trip happening today.', '저는 오늘 집에 가요.', 'I am going home today.'),
+      sceneBeat('A message about the end of the day is tucked between the route cards. Read what the sender is doing.', '지금 자요.', 'I am going to sleep now.'),
+      sceneBeat('The last note is from a friend. Work out what is about to happen.', '친구가 와요.', 'A friend is coming.'),
+    ],
+  },
+  'play-together': {
+    location: 'Game table', npcId: 'rival',
+    objective: 'Make room for a friend in the next game.',
+    intro: {
+      text: 'Your friendly rival has set up a tiny game at the table. Winning can wait; first your character needs to invite someone into the next round.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The rival makes room at the table. You have enough words to start a round, and there will always be time for a rematch.',
+      ko: '네, 좋아요.', en: 'Yes, sounds good.',
+    },
+    steps: [
+      sceneBeat('There is an empty place across the table. Use your words to bring a friend into the game.', '같이 게임을 해요.', 'Let us play a game together.'),
+      sceneBeat('No need to wait for another day. Put the invitation together for this moment.', '지금 같이 게임을 해요.', 'Let us play a game together now.'),
+      sceneBeat('This time the invitation comes to you. Choose a friendly response.', '네, 좋아요.', 'Yes, sounds good.'),
+      sceneBeat('Read the invitation as a whole before the pieces start moving.', '같이 게임을 해요.', 'Let us play a game together.'),
+    ],
+  },
+  'language-mission': {
+    location: 'Bookshop window', npcId: 'bookseller',
+    objective: 'Ask about an object and share what you are learning.',
+    intro: {
+      text: 'The bookshop owner has placed an unfamiliar object beside a few handwritten signs. Your character can ask one small question and leave with a useful sentence about learning.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The bookseller leaves a bookmark beside your notebook. You can return to the same small sentences whenever the signs feel unfamiliar again.',
+      ko: '감사합니다.', en: 'Thank you.',
+    },
+    steps: [
+      sceneBeat('Point to the object on the counter. Choose the question that helps you identify it.', '이거 뭐예요?', 'What is this?'),
+      sceneBeat('Now give a short answer about the object. Let the ending fit its name.', '책이에요.', 'It is a book.'),
+      sceneBeat('Tell the bookseller what you are learning.', '저는 한국어를 배워요.', 'I am learning Korean.'),
+      sceneBeat('Before closing the notebook, read the reminder on its last page.', '책을 다시 봐요.', 'Look at the book again.'),
+    ],
+  },
+  'pack-the-quest': {
+    location: 'Picnic packing bench', npcId: 'rival',
+    objective: 'Count a few supplies and make a final request.',
+    intro: {
+      text: 'The rival is packing a small picnic bag beside the game table. Your character can help count a few things and make one last request before a break outside.',
+      ko: '안녕하세요.', en: 'Hello.',
+    },
+    outro: {
+      text: 'The bag is ready for a quiet break. The rival saves the game pieces for another day; the useful words can come with you.',
+      ko: '네, 감사합니다.', en: 'Yes, thank you.',
+    },
+    steps: [
+      sceneBeat('Begin with the first item label. Choose the number form that belongs with the counter.', '한 개', 'One item.'),
+      sceneBeat('Put the request for fruit into a clear sentence.', '사과 두 개 주세요.', 'Two apples, please.'),
+      sceneBeat('Read the inventory note before deciding how many keys are packed.', '열쇠 한 개가 있어요.', 'I have one key.'),
+      sceneBeat('There is one more thing to request before leaving the counter.', '물 더 주세요.', 'More water, please.'),
+    ],
+  },
+};
+
 export const LESSONS = [
   {
     id: 'first-hello', title: 'First hello', subtitle: 'Meet the keeper of your little language town.', icon: 'chat',
+    quest: QUEST_SCENES['first-hello'],
     prerequisiteVocab: [], prerequisiteLessons: [],
     teachVocab: ['hello', 'yes', 'no', 'thanks', 'sorry', 'okay', 'good-night'],
     sourceIds: ['dictionary'],
@@ -292,6 +523,7 @@ export const LESSONS = [
   },
   {
     id: 'name-badge', title: 'Your name badge', subtitle: 'Tell the town a little about yourself.', icon: 'words',
+    quest: QUEST_SCENES['name-badge'],
     prerequisiteVocab: ['hello'], prerequisiteLessons: ['first-hello'],
     teachVocab: ['i', 'name', 'student', 'friend', 'person', 'austria', 'korea'],
     sourceIds: ['dictionary', 'copula', 'topic'],
@@ -313,6 +545,7 @@ export const LESSONS = [
   },
   {
     id: 'cafe-stop', title: 'Your café stop', subtitle: 'Order something after your first conversation.', icon: 'coffee',
+    quest: QUEST_SCENES['cafe-stop'],
     prerequisiteVocab: ['thanks'], prerequisiteLessons: ['first-hello'],
     teachVocab: ['water', 'coffee', 'tea', 'milk', 'bread', 'please-give'],
     sourceIds: ['dictionary'],
@@ -334,6 +567,7 @@ export const LESSONS = [
   },
   {
     id: 'inventory', title: 'Inventory check', subtitle: 'Collect the gear for a very small adventure.', icon: 'game',
+    quest: QUEST_SCENES.inventory,
     prerequisiteVocab: ['water', 'please-give', 'i'], prerequisiteLessons: ['name-badge', 'cafe-stop'],
     teachVocab: ['sword', 'shield', 'key', 'bag', 'door', 'have', 'not-have'],
     sourceIds: ['dictionary', 'key-sound'],
@@ -355,6 +589,7 @@ export const LESSONS = [
   },
   {
     id: 'find-the-cafe', title: 'Find the café', subtitle: 'A little map, a door, and a useful question.', icon: 'pin',
+    quest: QUEST_SCENES['find-the-cafe'],
     prerequisiteVocab: ['have', 'key'], prerequisiteLessons: ['inventory'],
     teachVocab: ['here', 'where', 'home', 'school', 'cafe', 'this'],
     sourceIds: ['dictionary'],
@@ -376,6 +611,7 @@ export const LESSONS = [
   },
   {
     id: 'lunch-break', title: 'Lunch break', subtitle: 'A tiny meal before the next quest.', icon: 'coffee',
+    quest: QUEST_SCENES['lunch-break'],
     prerequisiteVocab: ['water', 'bread', 'i'], prerequisiteLessons: ['name-badge', 'cafe-stop'],
     teachVocab: ['rice', 'apple', 'eat', 'drink', 'delicious', 'more'],
     sourceIds: ['dictionary', 'object', 'delicious-sound'],
@@ -399,6 +635,7 @@ export const LESSONS = [
   },
   {
     id: 'small-plan', title: 'A tiny plan', subtitle: 'Today, tomorrow, and a place to go.', icon: 'clock',
+    quest: QUEST_SCENES['small-plan'],
     prerequisiteVocab: ['school', 'home', 'today'], prerequisiteLessons: ['find-the-cafe'],
     teachVocab: ['go', 'come', 'today', 'tomorrow', 'now', 'sleep'],
     sourceIds: ['dictionary', 'destination'],
@@ -422,6 +659,7 @@ export const LESSONS = [
   },
   {
     id: 'play-together', title: 'Play together', subtitle: 'Invite a friend to your first Korean mini quest.', icon: 'game',
+    quest: QUEST_SCENES['play-together'],
     prerequisiteVocab: ['have', 'eat'], prerequisiteLessons: ['inventory', 'lunch-break'],
     teachVocab: ['game', 'together', 'do', 'good'],
     sourceIds: ['dictionary', 'object', 'together-sound', 'good-sound'],
@@ -445,6 +683,7 @@ export const LESSONS = [
   },
   {
     id: 'language-mission', title: 'Read the little signs', subtitle: 'Ask what something is, then learn one new thing.', icon: 'learn',
+    quest: QUEST_SCENES['language-mission'],
     prerequisiteVocab: ['korean', 'student', 'eat', 'this'], prerequisiteLessons: ['name-badge', 'lunch-break', 'find-the-cafe'],
     teachVocab: ['korean', 'alphabet', 'english', 'learn', 'see', 'book', 'again', 'slowly', 'what'],
     sourceIds: ['dictionary', 'copula', 'object', 'language-sound'],
@@ -466,6 +705,7 @@ export const LESSONS = [
   },
   {
     id: 'pack-the-quest', title: 'Pack the next quest', subtitle: 'Two apples, one key, and enough Korean to set off.', icon: 'words',
+    quest: QUEST_SCENES['pack-the-quest'],
     prerequisiteVocab: ['apple', 'key', 'please-give', 'have'], prerequisiteLessons: ['inventory', 'lunch-break'],
     teachVocab: ['one', 'two', 'more'],
     sourceIds: ['dictionary', 'counting'],

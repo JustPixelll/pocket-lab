@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  VOCAB, VOCAB_BY_ID, LESSONS, CURRICULUM_SOURCES, recommendLessons,
+  VOCAB, VOCAB_BY_ID, LESSONS, CHARACTERS, CURRICULUM_SOURCES, recommendLessons,
 } from '../app/src/main/assets/data/curriculum.js';
 
 const lessonById = Object.fromEntries(LESSONS.map(lesson => [lesson.id, lesson]));
@@ -169,4 +169,77 @@ test('time-first and place-first grammatical arrangements are explicitly accepte
   assert.ok(challenges['plan-2'].acceptedAnswers.includes('오늘 저는 집에 가요.'));
   assert.ok(challenges['map-3'].acceptedAnswers.includes('여기 문이 있어요.'));
   assert.ok(!challenges['pack-2'].acceptedAnswers.includes('두 사과 개 주세요.'));
+});
+
+test('story quests retain all ten existing lesson IDs used by saved progress', () => {
+  assert.deepEqual(LESSONS.map(lesson => lesson.id), [
+    'first-hello', 'name-badge', 'cafe-stop', 'inventory', 'find-the-cafe',
+    'lunch-break', 'small-plan', 'play-together', 'language-mission', 'pack-the-quest',
+  ]);
+  assert.ok(LESSONS.every(lesson => lesson.quest), 'Every existing lesson needs a scene');
+});
+
+test('recurring characters have Korean names and supported geometric appearances', () => {
+  const expectedCharacterIds = ['townkeeper', 'courier', 'cook', 'bookseller', 'rival'];
+  assert.deepEqual(Object.keys(CHARACTERS).sort(), expectedCharacterIds.sort());
+  for (const [id, character] of Object.entries(CHARACTERS)) {
+    assert.equal(character.id, id, `${id}: registry identity mismatch`);
+    assert.match(character.name, /^[가-힣]+$/u, `${id}: character names must use Korean script`);
+    assert.ok(character.role.trim() && character.bio.trim(), `${id}: missing reusable town-notebook text`);
+    const appearance = character.appearance;
+    assert.deepEqual(Object.keys(appearance).sort(), ['body', 'outfit', 'outfitStyle', 'accent', 'hat', 'hatColor', 'hatAccent'].sort());
+    for (const color of ['body', 'outfit', 'accent', 'hatColor', 'hatAccent']) {
+      assert.match(appearance[color], /^#[0-9A-Fa-f]{6}$/, `${id}: unsupported ${color} color`);
+    }
+    assert.ok(['tee', 'scarf', 'hoodie', 'cape'].includes(appearance.outfitStyle), `${id}: unsupported outfit`);
+    assert.ok(['none', 'beanie', 'cap', 'wizard', 'flower-crown'].includes(appearance.hat), `${id}: unsupported hat`);
+    assert.equal(LESSONS.filter(lesson => lesson.quest.npcId === id).length, 2, `${id}: character should recur in two existing quests`);
+  }
+});
+
+test('quest steps align with challenges and dialogue reuses reviewed Korean', () => {
+  const normalizeLine = value => String(value || '').normalize('NFC').trim().replace(/[.!?…]+$/u, '');
+  const reviewedLines = new Set([
+    ...VOCAB.flatMap(word => [word.ko, word.politeForm, word.example?.ko]),
+    ...LESSONS.flatMap(lesson => [
+      ...lesson.grammar.examples.map(example => example.ko),
+      ...lesson.challenges.flatMap(challenge => [challenge.ko, challenge.answer, ...(challenge.acceptedAnswers || [])]),
+    ]),
+  ].filter(line => typeof line === 'string' && /[가-힣]/u.test(line)).map(normalizeLine));
+
+  function assertDialogue(dialogue, label, optional = false) {
+    assert.equal(typeof dialogue.ko, 'string', `${label}: missing Korean field`);
+    assert.equal(typeof dialogue.en, 'string', `${label}: missing translation field`);
+    assert.equal(Boolean(dialogue.ko.trim()), Boolean(dialogue.en.trim()), `${label}: incomplete dialogue pair`);
+    if (!optional) assert.ok(dialogue.ko.trim(), `${label}: a checked challenge needs its model line`);
+    if (dialogue.ko) {
+      assert.doesNotMatch(dialogue.ko, /[A-Za-z]/, `${label}: Korean dialogue must not be romanized`);
+      assert.ok(reviewedLines.has(normalizeLine(dialogue.ko)), `${label}: dialogue introduces unreviewed Korean`);
+    }
+  }
+
+  for (const lesson of LESSONS) {
+    const quest = lesson.quest;
+    assert.ok(CHARACTERS[quest.npcId], `${lesson.id}: unresolved character reference`);
+    assert.ok(quest.location.trim() && quest.objective.trim(), `${lesson.id}: missing scene context`);
+    assert.ok(quest.intro.text.trim() && quest.outro.text.trim(), `${lesson.id}: missing opening or ending`);
+    assertDialogue(quest.intro, `${lesson.id} introduction`, true);
+    assertDialogue(quest.outro, `${lesson.id} ending`);
+    assert.equal(quest.steps.length, lesson.challenges.length, `${lesson.id}: story/challenge alignment mismatch`);
+    assert.equal(quest.steps.length, 4, `${lesson.id}: keep the existing four challenges`);
+    for (const [index, step] of quest.steps.entries()) {
+      assert.ok(step.text.trim(), `${lesson.id} step ${index}: missing situation`);
+      assert.doesNotMatch(step.text, /[가-힣]/u, `${lesson.id} step ${index}: keep model Korean in the after-check field`);
+      assertDialogue(step.after, `${lesson.id} step ${index}`);
+    }
+    if (quest.intro.ko) {
+      for (const challenge of lesson.challenges) {
+        for (const line of [challenge.ko, challenge.answer, ...(challenge.acceptedAnswers || [])]) {
+          if (typeof line === 'string' && /[가-힣]/u.test(line)) {
+            assert.notEqual(normalizeLine(quest.intro.ko), normalizeLine(line), `${lesson.id}: opening dialogue reveals a challenge line with its translation`);
+          }
+        }
+      }
+    }
+  }
 });

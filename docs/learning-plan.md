@@ -2,9 +2,25 @@
 
 ## The idea
 
-The learning area is a little town of short, connected situations. You introduce yourself, order something, collect a key, find a place, and invite a friend to play. Each adventure teaches one useful pattern and gives you four small puzzles to try it.
+The learning area is a little town of short, connected situations. Your character meets a familiar cast while introducing yourself, ordering something, collecting a key, finding a place, and inviting a friend to play. Each adventure teaches one useful pattern and gives you four small puzzles to try it.
 
 The first version uses an authored bank of 60 words and expressions across ten lessons. It recommends lessons using your actual vocabulary progress and completed adventures. This keeps the grammar bounded and reviewable while still letting the path respond to what you have practiced.
+
+The story treatment keeps **exactly the same ten initial quests**. These are light episodes about ordinary encounters, without a required overarching plot. The added opening, four story beats, and ending sit around the existing challenges; they do not add new learning requirements or reset progress.
+
+## The people in your town notebook
+
+The same five characters appear again across the ten quests. Their Korean names stay in 한글, and their roles and short biographies are explained in English. Each has a reusable geometric appearance, separate from the appearance you choose for your own character.
+
+| Character | Role | Existing quests |
+| --- | --- | --- |
+| 다온 | Town keeper with spare maps and small practical errands | First hello; Inventory check |
+| 하루 | Courier who writes every route on a little card | Your name badge; A tiny plan |
+| 보리 | Café cook who always has room for another short conversation | Your café stop; Lunch break |
+| 소담 | Bookshop owner who labels almost everything | Find the café; Read the little signs |
+| 나래 | Friendly rival with a fondness for games and theatrical hats | Play together; Pack the next quest |
+
+The Town notebook can show each portrait, biography, and links to these existing quests. Returning to a character gives the practice a familiar setting without creating additional quests.
 
 ## A useful first session
 
@@ -39,6 +55,8 @@ A word you just added is **new**. After you begin testing it, it is **learning**
 A lesson vocabulary prerequisite accepts a word you have begun learning or already mastered. You do not need to make the entire previous lesson's word list green before continuing. Required earlier adventures must also be completed. The lesson screen identifies the words or adventures that are still missing, so there is a concrete next step.
 
 The lesson puzzles accept explicitly listed grammatical alternative word orders. The primary example remains an uncomplicated beginner model; some accepted alternatives change emphasis. Korean does not have only one valid order for every sentence.
+
+Each challenge now has a brief situation in English, followed by a model Korean line after the answer is checked. The model line is practice dialogue and may be the learner's own line, rather than something the other character says. Opening dialogue avoids giving a quiz answer together with its translation. The first greeting quest opens with narration alone, because that conversation is what the learner is about to practice.
 
 ## Your own vocabulary
 

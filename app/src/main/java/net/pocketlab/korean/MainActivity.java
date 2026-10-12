@@ -564,9 +564,20 @@ public final class MainActivity extends Activity {
             nonempty++;
         }
         if (nonempty == 0) throw new IllegalArgumentException("Empty drawing");
-        Ink drawing = ink.build();
-        RecognitionContext context = RecognitionContext.builder()
-            .setWritingArea(new WritingArea(width, height)).build();
+        final Ink drawing;
+        final RecognitionContext context;
+        try {
+            drawing = ink.build();
+            // SDK 19 requires preContext even for a standalone drawing. Do not
+            // pass the exercise's expected answer as recognition context.
+            context = RecognitionContext.builder()
+                .setPreContext("")
+                .setWritingArea(new WritingArea(width, height)).build();
+        } catch (RuntimeException unavailable) {
+            fail(id, "INK_SETUP_FAILED",
+                "The handwriting service could not prepare this drawing. Reopen the app and try again.");
+            return;
+        }
         refreshModelState(() -> {
             if (!pending.containsKey(id)) return;
             if (!inkReady) {
@@ -584,7 +595,7 @@ public final class MainActivity extends Activity {
                         succeed(id, object("candidates", candidates));
                     })
                     .addOnFailureListener(error -> fail(id, "INK_RECOGNITION_FAILED",
-                        "The drawing could not be read. Try writing one word on a single line."));
+                        "The handwriting service could not read this drawing. Try again. If it keeps failing, prepare the Korean handwriting model in Settings."));
             } catch (RuntimeException unavailable) {
                 fail(id, "INK_RECOGNITION_FAILED", "The handwriting service could not start. Please reopen the app.");
             }
@@ -700,6 +711,10 @@ public final class MainActivity extends Activity {
                         && (code == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED
                             || code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)) {
                         speechFallbackTried = true;
+                        // The local language is missing. Let the default provider
+                        // use its available engines; keeping offline-only here
+                        // can repeat the same missing-language failure.
+                        speechPreferOffline = false;
                         startRecognizer(false);
                         return;
                     }

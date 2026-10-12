@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
   createStore, evaluateAnswer, getCardStatus, normalizeKorean,
   DAY_MS, CREDIT_GAP_MS, RETRY_DELAY_MS, StorageError, ValidationError,
+  SCHEMA_VERSION, CHARACTER_NAME_LIMIT,
 } from '../app/src/main/assets/engine.js';
+import { COSMETICS, COSMETIC_BY_ID, COSMETIC_SLOTS, DEFAULT_EQUIPMENT,
+  DEFAULT_CHARACTER_NAME } from '../app/src/main/assets/data/customization.js';
 
 const START = Date.UTC(2026, 9, 12, 12);
 const sleep = { id: 'sleep', ko: '자다', en: 'to sleep', pronunciation: '자다',
@@ -467,4 +470,311 @@ test('unknown cards, directions and unsafe settings are rejected without changes
   assert.throws(() => h.store.completeLesson('__proto__'), ValidationError);
   assert.equal(h.store.exportData(), original);
   assert.equal(getCardStatus(sleep), 'new');
+});
+
+function legacyBackup(store) {
+  const backup = JSON.parse(typeof store === 'string' ? store : store.exportData());
+  backup.schemaVersion = 1;
+  delete backup.profile;
+  return backup;
+}
+
+test('the cosmetic catalogue supplies free defaults and usable SVG styling metadata', () => {
+  assert.equal(new Set(COSMETICS.map(item => item.id)).size, COSMETICS.length);
+  for (const item of COSMETICS) {
+    assert.ok(COSMETIC_SLOTS.includes(item.slot));
+    assert.match(item.color, /^#[\da-f]{6}$/i);
+    assert.match(item.accent, /^#[\da-f]{6}$/i);
+    assert.ok(item.style && item.name);
+    assert.ok(item.price === 0 || (Number.isInteger(item.price) && item.price >= 20 && item.price <= 80));
+  }
+  for (const [slot, itemId] of Object.entries(DEFAULT_EQUIPMENT)) {
+    assert.equal(COSMETIC_BY_ID[itemId].slot, slot);
+    assert.equal(COSMETIC_BY_ID[itemId].price, 0);
+  }
+  const h = harness();
+  const profile = h.store.getProfile();
+  assert.equal(profile.characterName, DEFAULT_CHARACTER_NAME);
+  assert.equal(profile.coins, 0);
+  assert.equal(profile.totalEarned, 0);
+  assert.deepEqual(profile.equipment, DEFAULT_EQUIPMENT);
+  assert.deepEqual(profile.ownedItems, COSMETICS.filter(item => item.price === 0).map(item => item.id));
+});
+
+test('a quest pays twenty coins exactly once while preserving replay completions', () => {
+  const h = harness();
+  const first = h.store.completeLesson('first-hello');
+  assert.equal(first.coinsEarned, 20);
+  assert.deepEqual(first.rewards.map(({ type, targetId, coins }) => ({ type, targetId, coins })),
+    [{ type: 'lesson', targetId: 'first-hello', coins: 20 }]);
+  const replay = h.store.completeLesson('first-hello');
+  assert.equal(replay.coinsEarned, 0);
+  assert.deepEqual(replay.rewards, []);
+  assert.equal(replay.completions, 2);
+  assert.equal(h.store.completeLesson('old-quest-id').coinsEarned, 20);
+  assert.equal(h.store.getProfile().coins, 40);
+  assert.deepEqual(h.store.getProfile().rewards.lessonIds, ['first-hello', 'old-quest-id']);
+});
+
+test('mastery pays ten coins on the first green result, not on fast practice or re-mastery', () => {
+  const h = harness();
+  for (const offset of [0, DAY_MS]) {
+    h.setTime(START + offset);
+    for (const direction of ['enToKo', 'koToEn']) assert.equal(h.review('sleep', direction).coinsEarned, 0);
+  }
+  h.setTime(START + 4 * DAY_MS);
+  assert.equal(h.review('sleep', 'enToKo').coinsEarned, 0);
+  const earned = h.review('sleep', 'koToEn');
+  assert.equal(earned.status, 'mastered');
+  assert.equal(earned.coinsEarned, 10);
+  assert.equal(earned.rewards[0].targetId, 'sleep');
+  assert.equal(h.review('sleep', 'koToEn').coinsEarned, 0);
+  h.advance(DAY_MS);
+  assert.equal(h.review('sleep', 'enToKo', false).coinsEarned, 0);
+  assert.equal(h.store.getCard('sleep').status, 'learning');
+  assert.equal(h.store.getProfile().coins, 10);
+  h.advance(CREDIT_GAP_MS);
+  assert.equal(h.review('sleep', 'enToKo').coinsEarned, 0);
+  h.advance(3 * DAY_MS);
+  assert.equal(h.review('sleep', 'enToKo').coinsEarned, 0);
+  assert.equal(h.store.getCard('sleep').status, 'mastered');
+  assert.deepEqual(h.store.getProfile().rewards.masteredCardIds, ['sleep']);
+  assert.equal(h.store.getProfile().coins, 10);
+});
+
+test('schema-one migration restores historical rewards even for a now-yellow word', () => {
+  const old = harness();
+  master(old);
+  old.advance(DAY_MS);
+  old.review('sleep', 'enToKo', false);
+  old.store.completeLesson('original-quest-id');
+  old.store.completeLesson('original-quest-id');
+  old.store.setSettings({ dailyGoal: 23 });
+  const legacy = legacyBackup(old.store);
+  const storage = new MemoryStorage();
+  storage.setItem('pocketLabKorean.v1', JSON.stringify(legacy));
+  const writes = storage.writes;
+  const migrated = createStore(storage, { ...old.options, seed: [apple] });
+  assert.equal(storage.writes, writes + 1);
+  assert.equal(JSON.parse(storage.getItem('pocketLabKorean.v1')).schemaVersion, SCHEMA_VERSION);
+  assert.deepEqual(migrated.getCards(), old.store.getCards());
+  assert.equal(migrated.getCard('sleep').status, 'learning');
+  assert.equal(migrated.getCard('apple'), null);
+  assert.equal(migrated.getProfile().coins, 30);
+  assert.equal(migrated.getLessonProgress()['original-quest-id'].completions, 2);
+  assert.equal(migrated.getSettings().dailyGoal, 23);
+  const reopened = createStore(storage, old.options);
+  assert.equal(storage.writes, writes + 1);
+  assert.equal(reopened.getProfile().coins, 30);
+  assert.deepEqual(reopened.getProfile(), migrated.getProfile());
+});
+
+test('migration write failure leaves the entire legacy notebook intact for retry', () => {
+  const old = harness();
+  old.store.completeLesson('intro');
+  const raw = JSON.stringify(legacyBackup(old.store));
+  const storage = new MemoryStorage();
+  storage.setItem('pocketLabKorean.v1', raw);
+  const writes = storage.writes;
+  storage.failWrite = true;
+  assert.throws(() => createStore(storage, old.options), StorageError);
+  assert.equal(storage.getItem('pocketLabKorean.v1'), raw);
+  assert.equal(storage.writes, writes);
+  storage.failWrite = false;
+  assert.equal(createStore(storage, old.options).getProfile().coins, 20);
+});
+
+test('buying is atomic, equips the item, and repeating a purchase never charges again', () => {
+  const h = harness();
+  h.store.completeLesson('intro');
+  h.store.completeLesson('cafe');
+  const beforeCards = h.store.getCards();
+  const bought = h.store.buyItem('hat-beanie');
+  assert.equal(bought.purchased, true);
+  assert.equal(bought.spent, 20);
+  assert.equal(bought.profile.equipment.hat, 'hat-beanie');
+  assert.equal(bought.profile.coins, 20);
+  assert.equal(bought.profile.totalEarned, 40);
+  assert.equal(bought.profile.totalSpent, 20);
+  const writes = h.storage.writes;
+  assert.equal(h.store.buyItem('hat-beanie').purchased, false);
+  assert.equal(h.storage.writes, writes);
+  assert.equal(h.store.getProfile().purchases.length, 1);
+  assert.equal(h.store.buyItem('body-cocoa').spent, 0);
+  assert.equal(h.store.getProfile().equipment.body, 'body-cocoa');
+  h.store.equipItem('hat-none');
+  assert.equal(h.store.buyItem('hat-beanie').spent, 0);
+  assert.equal(h.store.getProfile().equipment.hat, 'hat-beanie');
+  assert.deepEqual(h.store.getCards(), beforeCards);
+  assert.deepEqual(createStore(h.storage, h.options).getProfile(), h.store.getProfile());
+});
+
+test('insufficient funds, unknown items, and unowned equipment never modify progress or coins', () => {
+  const h = harness();
+  const before = h.store.exportData();
+  assert.throws(() => h.store.buyItem('hat-wizard'), /80 coins/);
+  assert.throws(() => h.store.buyItem('missing-item'), ValidationError);
+  assert.throws(() => h.store.equipItem('hat-wizard'), ValidationError);
+  assert.equal(h.store.exportData(), before);
+});
+
+test('character names and returned profile values cannot mutate the stored notebook', () => {
+  const h = harness();
+  assert.equal(h.store.setCharacterName('  별님  ').characterName, '별님');
+  assert.equal(h.store.setCharacterName('별'.repeat(CHARACTER_NAME_LIMIT)).characterName.length, CHARACTER_NAME_LIMIT);
+  const before = h.store.exportData();
+  for (const name of ['', '별'.repeat(CHARACTER_NAME_LIMIT + 1), 'two\nlines']) {
+    assert.throws(() => h.store.setCharacterName(name), ValidationError);
+    assert.equal(h.store.exportData(), before);
+  }
+  const profile = h.store.getProfile();
+  profile.equipment.hat = 'hat-wizard';
+  profile.ownedItems.push('hat-wizard');
+  profile.rewards.lessonIds.push('invented');
+  profile.coins = 999;
+  assert.equal(h.store.exportData(), before);
+});
+
+test('failed character, equipment and purchase writes do not spend coins or change appearance', () => {
+  const h = harness();
+  h.store.completeLesson('intro');
+  const before = h.store.exportData();
+  const rawBefore = h.storage.getItem('pocketLabKorean.v1');
+  h.storage.failWrite = true;
+  assert.throws(() => h.store.buyItem('hat-beanie'), StorageError);
+  assert.throws(() => h.store.equipItem('body-cocoa'), StorageError);
+  assert.throws(() => h.store.setCharacterName('별님'), StorageError);
+  assert.equal(h.store.exportData(), before);
+  assert.equal(h.storage.getItem('pocketLabKorean.v1'), rawBefore);
+});
+
+test('failed reward writes cannot grant coins before the qualifying review or quest is saved', () => {
+  const h = harness();
+  for (const offset of [0, DAY_MS]) {
+    h.setTime(START + offset);
+    h.review('sleep', 'enToKo'); h.review('sleep', 'koToEn');
+  }
+  h.setTime(START + 4 * DAY_MS);
+  h.review('sleep', 'enToKo');
+  const before = h.store.exportData();
+  h.storage.failWrite = true;
+  assert.throws(() => h.review('sleep', 'koToEn'), StorageError);
+  assert.throws(() => h.store.completeLesson('intro'), StorageError);
+  assert.equal(h.store.exportData(), before);
+  assert.equal(h.store.getProfile().coins, 0);
+  h.storage.failWrite = false;
+  assert.equal(h.review('sleep', 'koToEn').coinsEarned, 10);
+  assert.equal(h.store.completeLesson('intro').coinsEarned, 20);
+  assert.equal(h.store.getProfile().coins, 30);
+});
+
+test('old backups cannot undo purchases, newer equipment, names, or earned rewards', () => {
+  const h = harness();
+  h.store.completeLesson('intro');
+  const old = h.store.exportData();
+  h.store.buyItem('hat-beanie');
+  h.store.equipItem('body-sand');
+  h.store.setCharacterName('별님');
+  const before = h.store.exportData();
+  h.store.importData(old);
+  h.store.importData(old);
+  h.store.importData(legacyBackup(old));
+  assert.equal(h.store.exportData(), before);
+  assert.equal(h.store.getProfile().coins, 0);
+  assert.equal(h.store.getProfile().equipment.hat, 'hat-beanie');
+});
+
+test('merge deduplicates rewards and purchases across matching words with different IDs', () => {
+  const a = harness({ seed: [sleep], name: 'character-a' });
+  const b = harness({ seed: [{ ...sleep, id: 'custom-sleep' }], name: 'character-b' });
+  master(a, 'sleep'); master(b, 'custom-sleep');
+  for (const h of [a, b]) { h.store.completeLesson('same-quest'); h.store.buyItem('hat-beanie'); }
+  a.store.importData(b.store.exportData());
+  assert.equal(a.store.getCards().length, 1);
+  assert.equal(a.store.getProfile().totalEarned, 30);
+  assert.equal(a.store.getProfile().totalSpent, 20);
+  assert.equal(a.store.getProfile().coins, 10);
+  assert.deepEqual(a.store.getProfile().rewards.masteredCardIds, ['sleep']);
+  assert.equal(a.store.getLessonProgress()['same-quest'].completions, 2);
+  const before = a.store.exportData();
+  a.store.importData(b.store.exportData());
+  assert.equal(a.store.exportData(), before);
+});
+
+test('legacy mastery remains earned when merged review timelines contain an earlier lapse', () => {
+  const earned = harness({ seed: [sleep], name: 'earned' });
+  master(earned);
+  const receiver = harness({ seed: [sleep], name: 'receiver' });
+  receiver.setTime(START + 3 * DAY_MS);
+  receiver.review('sleep', 'enToKo', false);
+  receiver.store.importData(legacyBackup(earned.store));
+  assert.equal(receiver.store.getCard('sleep').status, 'learning');
+  assert.equal(receiver.store.getProfile().coins, 10);
+  assert.deepEqual(createStore(receiver.storage, receiver.options).getProfile(), receiver.store.getProfile());
+  receiver.store.importData(legacyBackup(earned.store));
+  assert.equal(receiver.store.getProfile().coins, 10);
+});
+
+test('forked spending preserves both inventories with nonnegative available coins and no duplicated earnings', () => {
+  const a = harness({ name: 'fork-a' });
+  a.store.completeLesson('shared-quest');
+  const b = harness({ name: 'fork-b', seed: [] });
+  b.store.importData(a.store.exportData());
+  a.store.buyItem('hat-beanie');
+  b.store.buyItem('outfit-scarf');
+  b.store.setCharacterName('함께');
+  const merged = a.store.importData(b.store.exportData());
+  assert.equal(merged.coinDebt, 20);
+  const profile = a.store.getProfile();
+  assert.equal(profile.totalEarned, 20);
+  assert.equal(profile.totalSpent, 40);
+  assert.equal(profile.coins, 0);
+  assert.equal(profile.coinDebt, 20);
+  assert.ok(profile.ownedItems.includes('hat-beanie') && profile.ownedItems.includes('outfit-scarf'));
+  assert.equal(profile.equipment.hat, 'hat-beanie');
+  assert.equal(profile.equipment.outfit, 'outfit-scarf');
+  assert.equal(profile.characterName, '함께');
+  assert.throws(() => a.store.buyItem('body-mint'), ValidationError);
+  const before = a.store.exportData();
+  a.store.importData(b.store.exportData());
+  assert.equal(a.store.exportData(), before);
+  assert.equal(a.store.completeLesson('next-quest').coinsEarned, 20);
+  assert.equal(a.store.getProfile().coinDebt, 0);
+  assert.equal(a.store.getProfile().coins, 0);
+  a.store.completeLesson('third-quest');
+  assert.equal(a.store.getProfile().coins, 20);
+});
+
+test('profile backup validation rejects invalid receipts and ignores edited display balances', () => {
+  const h = harness();
+  h.store.completeLesson('intro'); h.store.buyItem('hat-beanie');
+  const before = h.store.exportData();
+  const badPrice = JSON.parse(before); badPrice.profile.purchases[0].price = -20;
+  const duplicated = JSON.parse(before); duplicated.profile.purchases.push({ ...duplicated.profile.purchases[0] });
+  const badEquipment = JSON.parse(before); badEquipment.profile.equipment.outfit = 'hat-beanie';
+  const unowned = JSON.parse(before); unowned.profile.equipment.hat = 'hat-wizard';
+  const badReward = JSON.parse(before); badReward.profile.rewards.mastery.push({ cardId: 'missing', at: START });
+  const missingProfile = JSON.parse(before); delete missingProfile.profile;
+  for (const invalid of [badPrice, duplicated, badEquipment, unowned, badReward, missingProfile]) {
+    assert.throws(() => h.store.importData(invalid), ValidationError);
+    assert.equal(h.store.exportData(), before);
+  }
+  const editedDisplayValues = JSON.parse(before);
+  Object.assign(editedDisplayValues.profile, { coins: 9999, totalEarned: 9999, ownedItems: ['hat-wizard'] });
+  h.store.importData(editedDisplayValues);
+  assert.equal(h.store.exportData(), before);
+});
+
+test('failed profile import retains both the notebook and all current purchases', () => {
+  const source = harness({ name: 'profile-source' });
+  source.store.completeLesson('intro'); source.store.buyItem('hat-beanie');
+  source.store.setCharacterName('별님');
+  const receiver = harness({ name: 'profile-receiver', seed: [apple] });
+  receiver.store.completeLesson('cafe'); receiver.store.buyItem('outfit-scarf');
+  const before = receiver.store.exportData();
+  const rawBefore = receiver.storage.getItem('pocketLabKorean.v1');
+  receiver.storage.failWrite = true;
+  assert.throws(() => receiver.store.importData(source.store.exportData()), StorageError);
+  assert.equal(receiver.store.exportData(), before);
+  assert.equal(receiver.storage.getItem('pocketLabKorean.v1'), rawBefore);
 });

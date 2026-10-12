@@ -1,17 +1,21 @@
 import { createStore, evaluateAnswer } from './engine.js';
-import { VOCAB, LESSONS, recommendLessons } from './data/curriculum.js';
+import { VOCAB, LESSONS, CHARACTERS, recommendLessons } from './data/curriculum.js';
 import { native, isAndroid } from './native.js';
 import { icon } from './icons.js';
+import { COSMETICS, DEFAULT_EQUIPMENT } from './data/customization.js';
+import { characterSvg, sceneDecor } from './characters.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const label = status => ({ new: 'New', learning: 'Learning', mastered: 'Mastered' }[status] || 'New');
 const languageName = lang => lang === 'ko' ? 'Korean' : 'English';
 const sourceById = new Map(VOCAB.map(word => [word.id, word]));
-const NAV = [['learn', 'Learn', 'learn'], ['write', 'Write', 'write'], ['speak', 'Speak', 'mic'], ['words', 'Words', 'words'], ['translate', 'Translate', 'translate']];
+const NAV = [['home', 'Home', 'home'], ['learn', 'Learn', 'learn'], ['write', 'Write', 'write'], ['speak', 'Speak', 'mic'], ['words', 'Words', 'words'], ['translate', 'Translate', 'translate']];
 let store;
 let capabilities = { platform: isAndroid ? 'android' : 'browser', translationReady: false, inkReady: false };
-let route = 'learn';
+let route = 'home';
+let homeSection = 'room';
+let shopSlot = 'hat';
 let modalOpener = null;
 let modalRevision = 0;
 let modalKind = '';
@@ -44,6 +48,13 @@ function safeMutation(fn) { try { const result = fn(); updateHeader(); return re
 function button(action, text, style = '', symbol = '', attrs = '') { return `<button class="button ${style}" data-action="${action}" ${attrs}>${symbol ? icon(symbol) : ''}${text}</button>`; }
 function intro(kicker, title, description) { return `<div class="page-intro"><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${description}</p></div>`; }
 function statusTag(card) { return `<span class="tag ${card.status === 'learning' ? 'yellow' : card.status === 'new' ? 'neutral' : ''}"><i class="dot ${card.status}"></i>${label(card.status)}</span>`; }
+function coinLabel(amount, cls = '') { return `<span class="coin-label ${cls}">${icon('coin')}<span>${Number(amount) || 0}<span class="sr-only"> coins</span></span></span>`; }
+function audioButton(text, title = 'Hear the Korean', cls = '') {
+  if (!text || !/[\uAC00-\uD7A3\u3131-\u318E]/u.test(text)) return '';
+  return `<button class="icon-button bordered audio-button ${cls}" type="button" data-action="play-korean" data-text="${escape(text)}" aria-label="${escape(title)}">${icon('volume')}</button>`;
+}
+function nameLanguage(name) { return /[\uAC00-\uD7A3\u3131-\u318E]/u.test(name) ? 'ko' : 'en'; }
+function personName(person) { return `<span lang="ko">${escape(person?.name || '')}</span>`; }
 function updateHeader() {
   const stats = store.getStats();
   $('#streak').innerHTML = `${icon('flame')} ${stats.streak || 0} day${stats.streak === 1 ? '' : 's'}`;
@@ -70,7 +81,8 @@ function collectCurated(id) {
 function render() {
   updateHeader(); updateNav();
   const main = $('#main');
-  if (route === 'learn') renderLearn(main);
+  if (route === 'home') renderHome(main);
+  else if (route === 'learn') renderLearn(main);
   else if (route === 'words') renderWords(main);
   else if (route === 'speak') renderSpeak(main);
   else if (route === 'translate') renderTranslate(main);
@@ -82,28 +94,78 @@ function navigate(next) {
   native('stopListening').catch(() => {});
   native('stopSpeaking').catch(() => {});
   if (practice) practice.listening = false;
-  route = NAV.some(n => n[0] === next) ? next : 'learn';
+  route = NAV.some(n => n[0] === next) ? next : 'home';
   if (location.hash !== `#${route}`) history.replaceState(null, '', `#${route}`);
   render(); window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
-function renderLearn(main) {
-  if (lessonRun) return renderLesson(main);
+function renderHome(main) {
+  const profile = store.getProfile();
   const stats = store.getStats();
   const dailyGoal = Number(store.getSettings().dailyGoal || 10);
   const daily = stats.today?.attempts || 0;
+  const completed = store.getLessonProgress();
+  const next = lessonsWithReadiness().find(lesson => !lesson.completed && lesson.ready)
+    || lessonsWithReadiness().find(lesson => !lesson.completed) || LESSONS[0];
+  const tabs = `<div class="home-tabs" aria-label="Home areas">${[['room', 'My corner', 'home'], ['shop', 'Little shop', 'shop'], ['wardrobe', 'Wardrobe', 'hat']].map(([id, name, symbol]) => `<button data-action="home-section" data-section="${id}" class="${homeSection === id ? 'active' : ''}" aria-pressed="${homeSection === id}">${icon(symbol)}${name}</button>`).join('')}</div>`;
+  const heading = `<div class="home-heading"><div><span class="eyebrow">Your corner of town</span><h1>${homeSection === 'shop' ? 'A little something new.' : homeSection === 'wardrobe' ? 'Made for your journey.' : 'Home, little adventurer.'}</h1></div>${coinLabel(profile.coins, 'wallet')}</div>${tabs}`;
+  if (homeSection !== 'room') {
+    const owned = new Set(profile.ownedItems);
+    const items = COSMETICS.filter(item => item.slot === shopSlot && (homeSection === 'shop' || owned.has(item.id) || item.price === 0));
+    main.innerHTML = `${heading}<div class="shop-companion"><div class="shop-avatar">${characterSvg(profile.equipment, { label: profile.characterName })}</div><div><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>Your outfit comes along on every quest.</p>${button('rename-character', 'Change name', 'outline small', 'write')}</div></div>
+      <div class="segmented" aria-label="Clothing categories">${[['hat', 'Hats'], ['outfit', 'Outfits'], ['body', 'Colors']].map(([id, title]) => `<button data-action="shop-slot" data-slot="${id}" class="${shopSlot === id ? 'active' : ''}">${title}</button>`).join('')}</div>
+      <div class="shop-grid">${items.map(item => {
+        const equipped = profile.equipment[item.slot] === item.id;
+        const isOwned = owned.has(item.id) || item.price === 0;
+        const action = isOwned ? 'equip-item' : 'buy-item';
+        const title = equipped ? 'Wearing' : isOwned ? 'Wear it' : `Buy · ${item.price} coins`;
+        const preview = { ...profile.equipment, [item.slot]: item.id };
+        return `<article class="shop-card ${equipped ? 'equipped' : ''}" data-item="${escape(item.id)}"><div class="shop-item-art">${characterSvg(preview, { label: `${profile.characterName} wearing ${item.name}` })}</div><h3>${escape(item.name)}</h3><p class="item-price">${isOwned ? (item.price === 0 ? 'Yours from the start' : 'In your wardrobe') : coinLabel(item.price)}</p>${button(action, title, `${equipped ? 'secondary' : isOwned ? 'outline' : ''} full small`, equipped ? 'check' : '', `data-id="${escape(item.id)}" ${equipped || (!isOwned && profile.coins < item.price) ? 'disabled' : ''}`)}${!isOwned && profile.coins < item.price ? `<p class="item-shortfall">${item.price - profile.coins} more coins to go</p>` : ''}</article>`;
+      }).join('')}</div>
+      <p class="soft-note space-top">Earn 20 coins the first time you finish a quest, and 10 when a word first turns green. Everything here is bought with learning coins.</p>${profile.coinDebt ? `<p class="soft-note space-top">Your merged backups included purchases from both copies. The next ${profile.coinDebt} earned coins will account for those items; your wardrobe is kept.</p>` : ''}`;
+    return;
+  }
+  main.innerHTML = `${heading}<div class="home-layout"><section class="character-home card"><div class="character-home-top"><span class="eyebrow">Your adventurer</span><button class="icon-button" data-action="rename-character" aria-label="Change character name">${icon('write')}</button></div><div class="home-stage">${sceneDecor('Garden')}<div class="home-player">${characterSvg(profile.equipment, { label: profile.characterName })}</div><span class="stage-sprout one"></span><span class="stage-sprout two"></span></div><div class="character-caption"><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>One small adventure at a time.</p></div>${button('home-section', 'Open wardrobe', 'secondary full', 'hat', 'data-section="wardrobe"')}</section>
+    <div class="home-notes"><div class="card next-quest"><span class="eyebrow">${completed[next.id] ? 'Worth another visit' : 'Your next quest'}</span><h2>${escape(next.title)}</h2><p>${escape(next.quest?.objective || next.subtitle)}</p><div class="next-quest-foot"><span class="tag">${escape(next.quest?.location || 'Around town')}</span>${!completed[next.id] ? coinLabel(20) : '<span class="check-pill">Completed</span>'}</div>${button('open-lesson', completed[next.id] ? 'Visit again' : 'Take a little journey', 'full space-top', 'arrow', `data-id="${escape(next.id)}"`)}</div>
+    <div class="daily-goal"><div><h3>A little Korean, every day.</h3><p>${Math.min(daily, dailyGoal)} of ${dailyGoal} reviews today</p>${button('start-practice', 'Practice words', 'outline small space-top', 'mic')}</div><div class="goal-ring" style="--progress:${Math.min(100, 100 * daily / dailyGoal)}%"><span>${daily}/${dailyGoal}</span></div></div></div></div>
+    <div class="stats-row"><div class="stat"><b>${Object.keys(completed).filter(id => LESSONS.some(lesson => lesson.id === id)).length}<small> / 10</small></b><span>Quests completed</span></div><div class="stat"><b>${stats.total}</b><span>Words collected</span></div><div class="stat mastered"><b>${stats.mastered}</b><span>Words mastered</span></div></div>
+    <div class="section-head"><h2>Familiar faces</h2><button class="text-button" data-action="town-notebook">Town notebook ${icon('arrow')}</button></div><div class="town-faces">${Object.values(CHARACTERS).map(person => `<button class="town-face" data-action="meet-character" data-id="${escape(person.id)}"><span>${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</span><strong lang="ko">${escape(person.name)}</strong><small>${escape(person.role)}</small></button>`).join('')}</div>
+    <p class="footer-note">${icon('coin')} First quest completion +20 · first green word +10</p>`;
+}
+
+function renameCharacter() {
+  const profile = store.getProfile();
+  showModal('What should we call you?', `<form id="character-form"><label class="field"><span>Your character’s name</span><input class="input" id="character-name" value="${escape(profile.characterName)}" maxlength="24" required autocomplete="off"></label><p class="soft-note">A name for your little companion. You can change it any time.</p><button class="button full space-top" type="submit">${icon('check')}Save name</button><div id="character-form-error" role="alert"></div></form>`);
+}
+function townNotebook(id = '') {
+  const people = id && CHARACTERS[id] ? [CHARACTERS[id]] : Object.values(CHARACTERS);
+  showModal(id ? 'A familiar face' : 'Your town notebook', `<p class="muted tiny">People to meet, and places to return to.</p><div class="town-notebook">${people.map(person => `<article class="person-card"><div class="person-portrait">${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</div><div><h3>${personName(person)}</h3><span class="eyebrow">${escape(person.role)}</span><p>${escape(person.bio || '')}</p><div class="person-quests">${LESSONS.filter(lesson => lesson.quest?.npcId === person.id).map(lesson => button('open-lesson', escape(lesson.title), 'outline small', 'arrow', `data-id="${escape(lesson.id)}"`)).join('')}</div></div></article>`).join('')}</div>`);
+}
+
+function questScene(lesson, { small = false, proud = false } = {}) {
+  const profile = store.getProfile();
+  const person = CHARACTERS[lesson.quest?.npcId];
+  if (!person) return '';
+  return `<div class="quest-scene ${small ? 'compact' : ''}" aria-label="${escape(`${profile.characterName} meets ${person.name} at ${lesson.quest.location}`)}"><span class="scene-location">${icon('pin')}${escape(lesson.quest.location)}</span>${sceneDecor(lesson.quest.location)}<div class="scene-person player">${characterSvg(profile.equipment, { label: profile.characterName, mood: proud ? 'proud' : 'happy' })}<span lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</span></div><div class="scene-person npc">${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name, mood: proud ? 'proud' : 'happy' })}<span lang="ko">${escape(person.name)}</span></div></div>`;
+}
+function questDialogue(lesson, dialogue) {
+  if (!dialogue || (!dialogue.text && !dialogue.ko)) return '';
+  const person = CHARACTERS[lesson.quest?.npcId];
+  return `<div class="quest-dialogue"><span class="dialogue-speaker">${personName(person)}<span>${escape(person?.role || '')}</span></span>${dialogue.text ? `<p>${escape(dialogue.text)}</p>` : ''}${dialogue.ko ? `<div class="spoken-line"><p class="ko" lang="ko">${escape(dialogue.ko)}</p>${audioButton(dialogue.ko, 'Hear the dialogue')}</div><p class="dialogue-translation">${escape(dialogue.en)}</p>` : ''}</div>`;
+}
+
+function renderLearn(main) {
+  if (lessonRun) return renderLesson(main);
   const lessons = lessonsWithReadiness();
-  const done = Object.keys(store.getLessonProgress()).length;
-  main.innerHTML = `${intro('Your little language notebook', 'A little Korean, every day.', 'Build your vocabulary. Find your voice. Make the words your own.')}
-    <div class="hero"><span class="eyebrow">Your daily practice</span><h2 lang="ko">오늘도 한 걸음.</h2><p>One more step today.<br>${stats.due ? `${stats.due} words are ready for another visit.` : 'A few small moments make a language feel familiar.'}</p>
-      <div class="hero-art" aria-hidden="true"><div class="hero-orbit"></div><div class="hero-orbit second"></div><span class="letter-tile back" lang="ko">가</span><span class="letter-tile" lang="ko">한</span><span class="small-spark">✳</span></div>
-      ${button('start-practice', 'Let’s practice', 'light', 'arrow')}
-    </div>
-    <div class="stats-row"><div class="stat"><b>${stats.total}</b><span>Words collected</span></div><div class="stat"><b>${stats.learning}</b><span>Taking root</span></div><div class="stat mastered"><b>${stats.mastered}</b><span>Mastered</span></div></div>
-    <div class="section-head"><h2>Your next little adventures</h2><span class="muted tiny">${done} / ${LESSONS.length}</span></div>
-    <div class="lesson-list">${lessons.map((lesson, i) => `<button class="lesson-card" data-action="open-lesson" data-id="${escape(lesson.id)}"><span class="lesson-icon ${i % 3 === 1 ? 'gold' : i % 3 === 2 ? 'coral' : ''}">${icon(lesson.icon)}</span><div class="lesson-content"><h3>${escape(lesson.title)}</h3><p>${escape(lesson.subtitle)}</p><div class="lesson-meta">${lesson.completed ? `${icon('check')} Revisit anytime` : lesson.ready ? '<span class="tag">Ready for you</span>' : `<span class="tag neutral">${(lesson.missingLessonIds || []).length ? 'A step to work toward' : `${(lesson.missingVocabIds || []).length} words to explore`}</span>`}<span>4 little challenges</span></div></div>${icon('chevron')}</button>`).join('')}</div>
-    <div class="section-head"><h2>Small steps count</h2></div><div class="daily-goal"><div><h3>Today’s word practice</h3><p>${Math.min(daily, dailyGoal)} of ${dailyGoal} reviews · no need to rush</p></div><div class="goal-ring" style="--progress:${Math.min(100, 100 * daily / dailyGoal)}%"><span>${daily}/${dailyGoal}</span></div></div>
-    <p class="footer-note">${icon('leaf')} A notebook that grows with you.</p>`;
+  const done = lessons.filter(lesson => lesson.completed).length;
+  const next = lessons.find(lesson => lesson.ready && !lesson.completed) || lessons.find(lesson => !lesson.completed) || lessons[0];
+  main.innerHTML = `${intro('Ten little quests', 'A town full of possibilities.', 'Meet someone, learn a useful phrase, and carry it into your next small adventure.')}
+    ${questScene(next, { small: true })}
+    <div class="quest-board-heading"><div><h2>Your quest journal</h2><p>${done} of ${LESSONS.length} completed · take them at your own pace</p></div>${coinLabel(store.getProfile().coins)}</div>
+    <div class="lesson-list quest-list">${lessons.map((lesson, i) => {
+      const person = CHARACTERS[lesson.quest?.npcId];
+      return `<button class="lesson-card quest-card ${lesson.completed ? 'quest-completed' : ''}" data-action="open-lesson" data-id="${escape(lesson.id)}"><span class="quest-number">${lesson.completed ? icon('check') : String(LESSONS.findIndex(item => item.id === lesson.id) + 1).padStart(2, '0')}</span><div class="lesson-content"><span class="quest-place">${escape(lesson.quest?.location || 'Around town')}</span><h3>${escape(lesson.title)}</h3><p>${escape(lesson.quest?.objective || lesson.subtitle)}</p><div class="lesson-meta">${lesson.completed ? '<span class="check-pill">Revisit anytime</span>' : lesson.ready ? '<span class="tag">Ready for you</span>' : `<span class="tag neutral">${(lesson.missingLessonIds || []).length ? 'An earlier quest first' : `${(lesson.missingVocabIds || []).length} words to warm up`}</span>`}${!lesson.completed ? coinLabel(20) : ''}</div>${person ? `<span class="quest-host">With ${personName(person)} · ${escape(person.role)}</span>` : ''}</div>${icon('chevron')}</button>`;
+    }).join('')}</div><p class="soft-note space-top">Every quest has four short challenges. First completions earn 20 coins; revisits are always welcome. The words you learn join your notebook for later practice.</p>`;
 }
 
 function renderWords(main) {
@@ -205,7 +267,7 @@ function renderSpeak(main) {
         <form id="answer-form"><label class="field" style="text-align:left"><span>${inputMode === 'voice' ? 'I heard · check before submitting' : `Your answer in ${languageName(answerLanguage)}`}</span><input id="practice-answer" class="input ${enToKo ? 'ko' : ''}" lang="${answerLanguage}" value="${escape(practice.answer)}" placeholder="${enToKo ? '한국어로 답하세요' : 'Type the meaning'}" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="300" ${practice.listening ? 'disabled' : ''}></label>
         ${practice.alternatives.length > 1 ? `<div class="choice-alternatives">${practice.alternatives.slice(0, 3).map(a => `<button type="button" data-action="speech-alternative" data-answer="${escape(a)}">${escape(a)}</button>`).join('')}</div>` : ''}
         <button type="submit" class="button full" ${practice.listening ? 'disabled' : ''}>${icon('check')}Check my answer</button></form>
-        ${practice.serviceError ? `<div class="inline-error" role="alert">${escape(practice.serviceError)}</div>` : ''}
+        ${practice.serviceError ? `<div class="inline-error" role="alert">${escape(practice.serviceError)}${isAndroid ? `<div class="button-row space-top">${button('speech-settings', 'Speech language settings', 'outline small', 'settings')}${button('input-mode', 'Use typed practice', 'outline small', 'keyboard', 'data-mode="typed"')}</div>` : ''}</div>` : ''}
         <button class="text-button space-top" data-action="reveal-answer">I need a little help · reveal answer</button>` : `<div class="feedback ${practice.feedback?.correct ? '' : 'wrong'}" role="status"><strong>${practice.feedback?.correct ? 'That’s the word.' : practice.assisted ? 'A word to revisit.' : 'Let’s keep this one growing.'}</strong><p class="answer ko" lang="ko">${escape(card.ko)}</p><p>${escape(card.en)}</p><p class="tiny">${escape(practice.feedback?.message || '')}</p>${button('play-answer', 'Hear the Korean', 'outline small', 'volume')}</div>${button('next-question', practice.count >= practice.target ? 'See this round' : 'Next word', 'full', 'arrow')}`}
     </div><p class="soft-note">${icon('info')}Speech checks which word you recalled. Check the transcript before submitting if your phone heard you incorrectly. ${isAndroid ? 'Your phone’s speech service may use the internet.' : 'Microphone practice is available in the Android app; typed practice works here.'}</p>`;
 }
@@ -222,6 +284,7 @@ function submitAnswer(event) {
   practice.answered = true; practice.count++; if (saved.correct) practice.correct++;
   practice.lastCardId = practice.current.card.id;
   practice.feedback = { correct: saved.correct, message: saved.correct ? (saved.credited ? 'A successful review, saved to your word history.' : 'Good practice. Another day’s review will help it stick.') : 'This word will come back sooner. The saved meanings are accepted; you can add another valid meaning in Words.' };
+  if (saved.coinsEarned) practice.feedback.message += ` First time mastered! +${saved.coinsEarned} coins for your character.`;
   renderSpeak($('#main')); updateHeader();
 }
 async function listenAnswer() {
@@ -243,8 +306,13 @@ async function listenAnswer() {
   }
 }
 async function speak(text, lang = 'ko-KR', rate) {
+  if (!String(text || '').trim()) return;
   try { await native('speak', { text, lang, rate: rate || Number(store.getSettings().speechRate || 0.9) }); }
-  catch (error) { handleError(error); }
+  catch (error) {
+    if (isAndroid && ['VOICE_REQUIRED', 'TTS_UNAVAILABLE'].includes(error.code)) {
+      showModal('Give Korean a voice', `<p class="grammar-text">${escape(error.message)}</p><div class="intro-steps"><p>Open your phone’s text-to-speech settings below.</p><p>Choose a speech engine that supports Korean, then download its Korean voice data.</p><p>Return here and tap a speaker again. Your quest stays where you left it.</p></div>${button('tts-settings', 'Open voice settings', 'full', 'volume')}<p class="soft-note space-top">Handwriting and translation models are separate from the phone’s spoken voices. Downloading those two models does not install a Korean voice.</p>`);
+    } else handleError(error);
+  }
 }
 
 function renderTranslate(main) {
@@ -385,7 +453,12 @@ async function checkWriting(buttonElement) {
     const matched = writing.candidates.some(c => normalized(c) === normalized(target));
     writing.feedback = `<div class="feedback ${matched ? '' : 'wrong'}"><strong>${matched ? 'Your writing was recognized.' : 'Here’s what your phone could read.'}</strong><p lang="ko" class="answer">${escape(writing.candidates.join(' · ') || '—')}</p><p>${matched ? 'Try hiding the guide for another go.' : 'Compare it with the target. Try making each block a little clearer, or use a full syllable.'}</p></div>`;
     if (route === 'write') $('#writing-feedback').innerHTML = writing.feedback;
-  } catch (error) { if (writing.target === target && writing.revision === revision) handleError(error); }
+  } catch (error) {
+    if (writing.target === target && writing.revision === revision && error.code !== 'CANCELLED') {
+      writing.feedback = `<div class="inline-error" role="alert"><strong>The handwriting service needs attention.</strong><p class="space-top">${escape(error.message || 'Try reading your strokes again.')}</p>${['MODEL_REQUIRED', 'INK_RECOGNITION_FAILED'].includes(error.code) ? button('prepare-model', 'Prepare handwriting model', 'outline full small space-top', 'download', 'data-model="ink"') : ''}<p class="pronunciation-note">Your drawing is still here. This is a service error, so no handwriting result was recorded.</p></div>`;
+      if (route === 'write') $('#writing-feedback').innerHTML = writing.feedback;
+    }
+  }
   finally { if (buttonElement.isConnected) { buttonElement.disabled = false; buttonElement.innerHTML = `${icon('check')}Read my handwriting`; } }
 }
 
@@ -394,11 +467,11 @@ function openLesson(id) {
   const missing = (lesson.missingVocabIds || []).map(wordId => sourceById.get(wordId)).filter(Boolean);
   const newWords = (lesson.teachVocab || []).map(wordId => sourceById.get(wordId)).filter(Boolean);
   const previous = (lesson.missingLessonIds || []).map(lessonId => LESSONS.find(l => l.id === lessonId)).filter(Boolean);
-  showModal(lesson.title, `<p class="muted tiny space-top">${escape(lesson.subtitle)}</p><div class="divider"></div><h3 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h3><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>
+  showModal(lesson.title, `${questScene(lesson, { small: true })}<p class="quest-objective">${escape(lesson.quest?.objective || lesson.subtitle)}</p><div class="quest-reward-note">${lesson.completed ? '<span class="check-pill">First-completion reward already collected</span>' : `${coinLabel(20)}<span>First-completion reward</span>`}</div><div class="divider"></div><h3 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h3><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>
     ${previous.length ? `<div class="soft-note space-top"><strong>One earlier adventure first</strong><p class="space-top">${previous.map(l => escape(l.title)).join(', ')}</p>${button('open-lesson', 'Open the earlier adventure', 'outline small space-top', 'arrow', `data-id="${escape(previous[0].id)}"`)}</div>` : ''}
     ${missing.length ? `<div class="soft-note space-top"><strong>A few words to warm up</strong><p class="space-top">${missing.map(w => `<span lang="ko">${escape(w.ko)}</span>`).join(' · ')}</p><p class="space-top">Practice these first so the sentences have something familiar to build on.</p>${button('prepare-lesson-words', 'Collect & practice these words', 'secondary small space-top', 'mic', `data-id="${escape(id)}"`)}</div>` : ''}
-    <div class="section-head"><h3>Words this adventure introduces</h3></div>${newWords.map(w => `<div class="trail-card"><h3 lang="ko" style="font-size:22px">${escape(w.ko)}</h3><p class="muted tiny">${escape(w.en)}</p></div>`).join('') || '<p class="muted tiny">A new way to use words you already have.</p>'}
-    ${button('start-lesson', lesson.completed ? 'Revisit this adventure' : 'Let’s try it', 'full space-top', 'arrow', `data-id="${escape(id)}" ${!lesson.ready && !lesson.completed ? 'disabled' : ''}`)}<p class="pronunciation-note">Lesson puzzles build understanding. Your vocabulary becomes mastered through separate recall reviews.</p>`);
+    <div class="section-head"><h3>Words for this quest</h3></div>${newWords.map(w => `<div class="trail-card quest-word"><div><h3 lang="ko">${escape(w.ko)}</h3><p class="muted tiny">${escape(w.en)}</p></div>${audioButton(w.ko, `Hear ${w.ko}`)}</div>`).join('') || '<p class="muted tiny">A new way to use words you already have.</p>'}
+    ${button('start-lesson', lesson.completed ? 'Revisit this quest' : 'Begin quest', 'full space-top', 'arrow', `data-id="${escape(id)}" ${!lesson.ready && !lesson.completed ? 'disabled' : ''}`)}<p class="pronunciation-note">Quest puzzles build understanding. Your vocabulary becomes mastered through separate recall reviews.</p>`);
 }
 function startLesson(id) {
   const lesson = lessonsWithReadiness().find(l => l.id === id);
@@ -409,18 +482,27 @@ function startLesson(id) {
 }
 function renderLesson(main) {
   const { lesson, index } = lessonRun;
-  const header = `<div class="back-heading"><button class="icon-button" data-action="exit-lesson" aria-label="Back to lessons">${icon('back')}</button><div><span class="eyebrow">Little adventure</span><h2>${escape(lesson.title)}</h2></div></div>`;
+  const header = `<div class="back-heading"><button class="icon-button" data-action="exit-lesson" aria-label="Back to quests">${icon('back')}</button><div><span class="eyebrow">Your quest</span><h2>${escape(lesson.title)}</h2></div>${coinLabel(store.getProfile().coins)}</div>`;
   if (index < 0) {
-    main.innerHTML = `${header}<div class="card"><span class="eyebrow">One useful pattern</span><h2 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h2><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>${lesson.grammar.examples.map((ex, i) => `<div class="example-block"><div lang="ko" class="ko">${escape(ex.ko)}</div><p>${escape(ex.en)}</p><button class="icon-button bordered space-top" data-action="lesson-example" data-index="${i}" aria-label="Hear example ${i + 1}">${icon('volume')}</button></div>`).join('')}${button('lesson-next', 'Try it in a sentence', 'full', 'arrow')}</div>`; return;
+    main.innerHTML = `${header}${questScene(lesson)}${questDialogue(lesson, lesson.quest?.intro)}<div class="card quest-pattern"><span class="eyebrow">One useful pattern</span><h2 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h2><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>${lesson.grammar.examples.map((ex, i) => `<div class="example-block"><div class="spoken-line"><div lang="ko" class="ko">${escape(ex.ko)}</div>${audioButton(ex.ko, `Hear example ${i + 1}`)}</div><p>${escape(ex.en)}</p></div>`).join('')}${button('lesson-next', 'Step into the story', 'full', 'arrow')}</div>`;
+    return;
   }
   if (index >= lesson.challenges.length) {
-    main.innerHTML = `${header}<div class="card" style="text-align:center"><div class="success-seal">${icon('spark')}</div><h2>A new little possibility.</h2><p class="muted space-top">You can use another piece of Korean now.</p><p class="soft-note space-top">${lessonRun.mistakes ? 'You worked through the tricky parts. Revisit this adventure whenever you want.' : 'Every sentence found its place.'}</p>${button('finish-lesson', 'Save & keep growing', 'full space-top', 'check')}</div>`; return;
+    const completed = !!store.getLessonProgress()[lesson.id];
+    main.innerHTML = `${header}${questScene(lesson, { proud: true })}${questDialogue(lesson, lesson.quest?.outro)}<div class="card quest-finish"><span class="eyebrow">A small quest, well done</span><h2>You made a little progress.</h2><p class="muted space-top">${lessonRun.mistakes ? 'You worked through the tricky parts. You can visit again whenever you like.' : 'Every sentence found its place.'}</p><div class="quest-completion-reward">${completed ? `${icon('check')}<span>Revisited · first reward already collected</span>` : `${coinLabel(20)}<span>For your first completion</span>`}</div>${button('finish-lesson', completed ? 'Finish this visit' : 'Finish quest & collect 20 coins', 'full space-top', 'check')}</div>`;
+    return;
   }
   const challenge = lesson.challenges[index];
-  main.innerHTML = `${header}<div class="practice-head"><span>Challenge ${index + 1} of ${lesson.challenges.length}</span><span>Put it into practice</span></div><div class="progress-line"><span style="width:${index / lesson.challenges.length * 100}%"></span></div><h2 class="challenge-prompt">${escape(challenge.prompt)}</h2>${challenge.ko ? `<p lang="ko" class="detail-word" style="font-size:28px">${escape(challenge.ko)}</p>` : ''}
-    ${challenge.type === 'order' ? `<p class="muted tiny">Tap the pieces to build the sentence. Tap a placed piece to return it.</p><div class="sentence-tray token-tray">${lessonRun.tokens.map((token, i) => `<button class="token" lang="ko" data-action="remove-token" data-index="${i}" ${lessonRun.feedback ? 'disabled' : ''}>${escape(token)}</button>`).join('')}</div><div class="token-tray">${challenge.options.map((token, i) => `<button class="token" lang="ko" data-action="add-token" data-index="${i}" ${lessonRun.tokens.includes(token) || lessonRun.feedback ? 'disabled' : ''}>${escape(token)}</button>`).join('')}</div>` : `<div class="answer-options">${challenge.options.map((option, i) => `<button class="answer-option ${lessonRun.choice === option ? 'selected' : ''}" data-action="lesson-choice" data-index="${i}" ${lessonRun.feedback ? 'disabled' : ''}>${escape(option)}</button>`).join('')}</div>`}
-    ${lessonRun.feedback ? `<div class="feedback ${lessonRun.feedback.correct ? '' : 'wrong'}" role="status"><strong>${lessonRun.feedback.correct ? 'You’ve got the idea.' : 'A useful thing to notice.'}</strong><p>${escape(challenge.explanation)}</p>${!lessonRun.feedback.correct ? `<p class="answer">${escape(challenge.answer)}</p>` : ''}</div>${button(lessonRun.feedback.correct ? 'lesson-next' : 'lesson-retry', lessonRun.feedback.correct ? 'Keep going' : 'Try this one again', 'full space-top', 'arrow')}` : button('check-lesson', 'Check this sentence', 'full space-top', 'check')}`;
+  const step = lesson.quest?.steps?.[index];
+  const answerArea = challenge.type === 'order'
+    ? `<p class="muted tiny">Build the sentence. Tap a piece to move it; tap its speaker to listen.</p><div class="sentence-tray token-tray">${lessonRun.tokens.length ? lessonRun.tokens.map((token, i) => `<button class="token" lang="ko" data-action="remove-token" data-index="${i}" ${lessonRun.feedback ? 'disabled' : ''}>${escape(token)}</button>`).join('') : '<span class="sentence-placeholder">Your sentence goes here</span>'}</div>${lessonRun.tokens.length ? `<div class="sentence-listen">${audioButton(lessonRun.tokens.join(' '), 'Hear your sentence')}<span>Hear your sentence</span></div>` : ''}<div class="token-tray available-tokens">${challenge.options.map((token, i) => `<div class="token-with-audio"><button class="token" lang="ko" data-action="add-token" data-index="${i}" ${lessonRun.tokens.includes(token) || lessonRun.feedback ? 'disabled' : ''}>${escape(token)}</button>${audioButton(token, `Hear ${token}`, 'token-audio')}</div>`).join('')}</div>`
+    : `<div class="answer-options">${challenge.options.map((option, i) => `<div class="answer-option-row"><button class="answer-option ${lessonRun.choice === option ? 'selected' : ''}" data-action="lesson-choice" data-index="${i}" aria-pressed="${lessonRun.choice === option}" ${lessonRun.feedback ? 'disabled' : ''}>${escape(option)}</button>${audioButton(option, `Hear option ${i + 1}`)}</div>`).join('')}</div>`;
+  const example = step?.after;
+  main.innerHTML = `${header}${questScene(lesson, { small: true })}<div class="practice-head quest-progress"><span>Step ${index + 1} of ${lesson.challenges.length}</span><span>${escape(lesson.quest?.location || 'Around town')}</span></div><div class="progress-line"><span style="width:${index / lesson.challenges.length * 100}%"></span></div>${step?.text ? `<p class="quest-beat">${escape(step.text)}</p>` : ''}<h2 class="challenge-prompt">${escape(challenge.prompt)}</h2>${challenge.ko ? `<div class="spoken-line challenge-line"><p lang="ko" class="ko">${escape(challenge.ko)}</p>${audioButton(challenge.ko, 'Hear the question')}</div>` : ''}
+    ${answerArea}
+    ${lessonRun.feedback ? `<div class="feedback ${lessonRun.feedback.correct ? '' : 'wrong'}" role="status"><strong>${lessonRun.feedback.correct ? 'You’ve got the idea.' : 'A useful thing to notice.'}</strong><p>${escape(challenge.explanation)}</p>${!lessonRun.feedback.correct ? `<p class="answer">${escape(challenge.answer)}</p>` : ''}${example?.ko ? `<div class="feedback-example"><span class="eyebrow">Say it out loud</span><div class="spoken-line"><p class="ko" lang="ko">${escape(example.ko)}</p>${audioButton(example.ko, 'Hear the model sentence')}</div><p>${escape(example.en)}</p></div>` : ''}</div>${button(lessonRun.feedback.correct ? 'lesson-next' : 'lesson-retry', lessonRun.feedback.correct ? 'Continue the story' : 'Try this one again', 'full space-top', 'arrow')}` : button('check-lesson', 'Check this sentence', 'full space-top', 'check')}`;
 }
+
 function checkLesson() {
   if (!lessonRun || lessonRun.feedback) return;
   const challenge = lessonRun.lesson.challenges[lessonRun.index];
@@ -449,7 +531,7 @@ function showSettings() {
   showModal('Your pocket notebook', `<div class="soft-note">Your vocabulary, review history and lessons are saved on this phone. Export a backup before moving to another phone or uninstalling.</div>
     <section class="settings-section"><h3>Your pace</h3><label class="setting-row"><span>Daily review goal</span><select id="daily-goal">${[5, 10, 15, 20].map(n => `<option value="${n}" ${Number(settings.dailyGoal || 10) === n ? 'selected' : ''}>${n} words</option>`).join('')}</select></label><label class="setting-row"><span>Korean audio speed</span><select id="speech-rate">${[[0.75, 'Gentle'], [0.85, 'Natural'], [1, 'Full speed']].map(([n, name]) => `<option value="${n}" ${Number(settings.speechRate || 0.85) === n ? 'selected' : ''}>${name}</option>`).join('')}</select></label></section>
     <section class="settings-section"><h3>Korean on your phone</h3><p>Translation and handwriting need a one-time model download, roughly 50 MB together. This download can use your current mobile connection.</p><div class="setting-row"><span>Translation model</span><span class="status-badge ${capabilities.translationReady ? '' : 'pending'}">${capabilities.translationReady ? 'Ready' : 'Download needed'}</span></div><div class="setting-row"><span>Handwriting model</span><span class="status-badge ${capabilities.inkReady ? '' : 'pending'}">${capabilities.inkReady ? 'Ready' : 'Download needed'}</span></div>${button('prepare-model', 'Prepare both Korean models', 'secondary full space-top', 'download', 'data-model="all"')}<p>Speech recognition and spoken audio use your phone’s installed services. Speech may be processed online by that provider; no recordings are stored by this app. Offline language availability varies by phone.</p>${button('speech-settings', 'Phone speech settings', 'outline full small', 'settings')}${button('tts-settings', 'Korean voice settings', 'outline full small space-top', 'volume')}</section>
-    <section class="settings-section"><h3>Keep your progress</h3><p>Backups contain your words and learning history. Import merges with your notebook; it doesn’t erase it.</p><div class="button-row equal">${button('export-data', 'Export backup', 'outline small', 'download')}${button('import-data', 'Import backup', 'outline small', 'upload')}</div></section>
+    <section class="settings-section"><h3>Keep your progress</h3><p>Backups contain your words, review history, quests, character, coins, and wardrobe. Import merges with your saved progress.</p><div class="button-row equal">${button('export-data', 'Export backup', 'outline small', 'download')}${button('import-data', 'Import backup', 'outline small', 'upload')}</div></section>
     <section class="settings-section"><h3>How words grow</h3><p><strong>Black:</strong> collected, not tested yet.<br><strong>Yellow:</strong> learning through recall.<br><strong>Green:</strong> successful reviews in both directions across multiple days. A miss brings a word back into learning.</p><p>Speech is vocabulary recall, not a pronunciation score. Typed answers count too. Lesson puzzles help understanding; they don’t automatically mark vocabulary mastered.</p></section>
     <section class="settings-section"><h3>About Pocket Korean</h3><p>A personal language playground. Version ${escape(capabilities.version || '0.1.0')}. No app account or API key is needed.</p><p>Google Translate powers automatic translations via ML Kit. These are suggestions and may be incorrect. The app is independent of Google.</p><p><button class="inline-link" data-action="translation-notice">Translation attribution & disclaimer</button></p><p class="tiny">${isAndroid ? 'Your progress is local to this installation.' : 'Browser preview: handwriting checking, translation and microphone practice require the installed Android app.'}</p></section>`, 'settings');
 }
@@ -458,11 +540,19 @@ async function exportData() {
   catch (error) { handleError(error); }
 }
 async function importData() {
-  try { const result = await native('importBackup'); const merged = store.importData(result.content); practice = null; speechToken++; closeModal(); render(); toast(`Backup merged. ${merged.added} new words added.`); }
+  try { const result = await native('importBackup'); const merged = store.importData(result.content); practice = null; lessonRun = null; speechToken++; closeModal(); render(); toast(`Backup merged. ${merged.added} new words added.`); }
   catch (error) { handleError(error); }
 }
 
 const actions = {
+  'home-section': el => { homeSection = ['room', 'shop', 'wardrobe'].includes(el.dataset.section) ? el.dataset.section : 'room'; if (route !== 'home') navigate('home'); else renderHome($('#main')); },
+  'shop-slot': el => { if (!['hat', 'outfit', 'body'].includes(el.dataset.slot)) return; shopSlot = el.dataset.slot; renderHome($('#main')); },
+  'buy-item': el => { const result = safeMutation(() => store.buyItem(el.dataset.id)); if (!result) return; renderHome($('#main')); toast(result.purchased ? `${result.item.name} is yours. Looking good!` : 'Outfit updated.'); },
+  'equip-item': el => { if (!safeMutation(() => store.equipItem(el.dataset.id))) return; renderHome($('#main')); toast('Ready for your next adventure.'); },
+  'rename-character': renameCharacter,
+  'town-notebook': () => townNotebook(),
+  'meet-character': el => townNotebook(el.dataset.id),
+  'play-korean': el => speak(el.dataset.text),
   'close-modal': closeModal,
   'close-backdrop': element => { if (element === eventTarget) closeModal(); },
   'start-practice': () => { newPractice(); navigate('speak'); },
@@ -517,13 +607,18 @@ const actions = {
   'start-lesson': el => startLesson(el.dataset.id),
   'exit-lesson': () => { lessonRun = null; render(); },
   'lesson-example': el => speak(lessonRun.lesson.grammar.examples[Number(el.dataset.index)].ko),
-  'lesson-next': () => { lessonRun.index++; lessonRun.choice = ''; lessonRun.tokens = []; lessonRun.feedback = null; renderLesson($('#main')); },
+  'lesson-next': () => { lessonRun.index++; lessonRun.choice = ''; lessonRun.tokens = []; lessonRun.feedback = null; renderLesson($('#main')); window.scrollTo({ top: 0, behavior: 'instant' }); },
   'lesson-choice': el => { lessonRun.choice = lessonRun.lesson.challenges[lessonRun.index].options[Number(el.dataset.index)]; renderLesson($('#main')); },
   'add-token': el => { const token = lessonRun.lesson.challenges[lessonRun.index].options[Number(el.dataset.index)]; if (!lessonRun.tokens.includes(token)) lessonRun.tokens.push(token); renderLesson($('#main')); },
   'remove-token': el => { lessonRun.tokens.splice(Number(el.dataset.index), 1); renderLesson($('#main')); },
   'check-lesson': checkLesson,
   'lesson-retry': () => { lessonRun.feedback = null; lessonRun.choice = ''; lessonRun.tokens = []; renderLesson($('#main')); },
-  'finish-lesson': () => { if (!safeMutation(() => store.completeLesson(lessonRun.lesson.id))) return; lessonRun = null; render(); toast('Adventure completed. A new step is waiting.'); },
+  'finish-lesson': () => {
+    if (!lessonRun || lessonRun.index < lessonRun.lesson.challenges.length) return;
+    const saved = safeMutation(() => store.completeLesson(lessonRun.lesson.id));
+    if (!saved) return;
+    lessonRun = null; render(); toast(saved.coinsEarned ? `Quest complete! +${saved.coinsEarned} coins. Something new awaits in the shop.` : 'A lovely return visit. Your progress is saved.');
+  },
   'export-data': exportData,
   'import-data': importData,
   'speech-settings': () => native('openSpeechSettings', { kind: 'speech' }).catch(handleError),
@@ -545,6 +640,11 @@ document.addEventListener('click', event => {
 document.addEventListener('submit', event => {
   if (event.target.id === 'answer-form') submitAnswer(event);
   if (event.target.id === 'word-form') saveWord(event);
+  if (event.target.id === 'character-form') {
+    event.preventDefault();
+    try { store.setCharacterName($('#character-name').value.trim()); closeModal(); render(); toast('A name to take on your journey.'); }
+    catch (error) { $('#character-form-error').innerHTML = `<div class="inline-error">${escape(error.message)}</div>`; }
+  }
 });
 document.addEventListener('input', event => {
   if (event.target.id === 'word-search') { wordQuery = event.target.value; updateWordResults(); }
@@ -586,7 +686,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) nativ
 window.pocketBack = () => {
   if ($('#modal-root').childElementCount) { closeModal(); return true; }
   if (route === 'learn' && lessonRun) { lessonRun = null; render(); return true; }
-  if (route !== 'learn') { navigate('learn'); return true; }
+  if (route !== 'home') { navigate('home'); return true; }
   return false;
 };
 
@@ -596,7 +696,7 @@ try {
   practiceDirection = store.getSettings().testDirection || 'mixed';
   updateHeader();
   $('#settings-button').addEventListener('click', showSettings);
-  navigate(location.hash.slice(1) || 'learn');
+  navigate(location.hash.slice(1) || 'home');
   native('capabilities').then(result => { capabilities = result; if (route === 'translate' || route === 'write') render(); }).catch(() => {});
 } catch (error) {
   $('#main').innerHTML = `<div class="page-intro"><h1>Your notebook needs attention.</h1><p>${escape(error.message)}</p></div><div class="soft-note">Your saved data has not been reset. Close and reopen the app. If you have a backup, keep it safe while we repair the notebook.</div>`;

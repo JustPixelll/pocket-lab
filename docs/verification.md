@@ -16,7 +16,7 @@ These tests require no installed npm packages. They cover vocabulary scheduling 
 node tests/ui-smoke.mjs
 ```
 
-The script uses an existing Playwright installation and Chromium browser. It starts its own temporary server on localhost, opens a fresh browser context, checks all five tabs at 320/390/768 pixels, verifies typed-recall persistence, saves/searches/opens a custom word, completes the first lesson, and requires no uncaught page errors. It also saves six screenshots, by default in `docs/screenshots`. Its server and browser are closed when the run finishes or fails.
+The script uses an existing Playwright installation and Chromium browser. It starts its own temporary server on localhost, opens a fresh browser context, checks all six tabs at 320/390/768 pixels, verifies typed-recall persistence, saves/searches/opens a custom word, completes and revisits the first quest, buys a hat and checks persistence, verifies independent quest-audio controls, and requires no uncaught page errors. It also saves twelve screenshots, by default in `docs/screenshots`. Its server and browser are closed when the run finishes or fails.
 
 Playwright is optional QA tooling and is not a production dependency. Use these environment variables to supply tooling installed elsewhere:
 
@@ -39,7 +39,7 @@ node tests/ui-smoke.mjs
 
 Repository assets are located relative to the script, so it can also run from another working directory. Executable, font, and screenshot override paths may be absolute or relative to that working directory. No public server or signed-in session is used.
 
-The browser check exercises the local interface and typed learning flows. Android microphone services, Korean audio, model downloads, handwriting recognition, translation quality, APK installation, and device-specific behavior still need Android verification; a passing browser run does not establish those capabilities.
+The browser check exercises the local interface and typed learning flows. Its speech-synthesis stub checks the requested Korean text and language; it does not verify voice playback. Android microphone services, Korean audio, model downloads, handwriting recognition, translation quality, APK installation, and device-specific behavior still need Android verification; a passing browser run does not establish those capabilities.
 
 ## Installed Android app check
 
@@ -49,25 +49,26 @@ The **Android startup smoke** workflow follows successful builds on `main`. It d
 node tests/android-smoke.mjs path/to/Pocket-Korean.apk android-smoke
 ```
 
-The adjacent `BUILD-TYPE.txt` must identify a disposable debug build. The check verifies the real Activity launch, bundled WebView page, stylesheet, five navigation items, and a native `capabilities` response. It checks for a surviving app process and application crashes. The artifact records the APK's SHA-256 alongside the result, device screenshot, and logs.
+The adjacent `BUILD-TYPE.txt` must identify a disposable debug build. The check verifies the real Activity launch, bundled WebView page, stylesheet, six navigation items, and a native `capabilities` response. It checks for a surviving app process and application crashes. The artifact records the APK's SHA-256 alongside the result, device screenshot, and logs.
 
 This gate does not request a microphone permission, download models, or perform translation, ink recognition, or spoken audio. Those services can correctly report unavailable on a fresh emulator. Stable release builds disable WebView debugging, so this specific debug gate explicitly skips them; it does not mark them as device-tested.
 
-## Latest prototype verification
+## Character and quest update verification
 
-- **APK version:** `0.1.6` (disposable debug signing).
-- **Built source:** `b800c5dfb105effd4448b1fdcb53abc07e5002db`.
-- **Build and Android lint passed:** [build run 38316974838](https://github.com/JustPixelll/pocket-lab/actions/runs/38316974838). No lint errors; compatibility/update and trusted-WebView JavaScript warnings remain in the build report.
-- **APK:** `Pocket-Korean.apk`, 96,820,159 bytes. SHA-256: `078958515dc4b1d58c557ca1c7b2ef1b553415c77cd235be40e28b03b5ee43be`. The downloaded ZIP and APK checksums match the published artifact metadata and checksum file.
-- **Logic and integration checks passed:** all 58 `npm test` tests, covering scheduling, persistence/imports, curriculum consistency, and app-handler regressions.
-- **Browser smoke passed:** all 18 checks, with zero uncaught page errors. These covered all five tabs at 320/390/768 pixels, typed-recall persistence, custom vocabulary saving/search/detail, and first-lesson completion.
+- **Logic and integration:** 81 tests pass, including old-backup migration, permanent quest/mastery rewards, atomic purchases, idempotent imports, failed-save recovery, and independent quest-audio controls.
+- **Browser:** 29 checks pass, with zero uncaught page errors. All six tabs fit at 320/390/768 pixels; shop and wardrobe also fit at the narrow and wide sizes. The first quest awards 20 coins, its replay awards none, and a purchased/equipped beanie survives reopening and appears in quest scenes.
+- **Content:** exactly ten quests, four challenges each, and five reusable townspeople. Existing lesson IDs, grammar, challenge answers, prerequisites and vocabulary are preserved. Korean content uses no romanization.
+- **Handwriting regression:** inspection of the actual `digital-ink-recognition:19.0.0` SDK reproduced `IllegalStateException: Missing required properties: preContext` when building the previous context. A focused JVM check against that SDK confirmed the corrected builder accepts an empty pre-context and retains the writing-area dimensions. The target answer is never supplied to recognition. See [native services](native-services.md).
+- **Native build and new APK:** pending the combined Android Actions build. Browser checks and the builder regression do not establish recognition of a finger drawing on a phone.
 
-**Installed Android checks:** [smoke run 38317169219](https://github.com/JustPixelll/pocket-lab/actions/runs/38317169219) tests this exact APK on an Android 15 emulator. Completed attempts verified Activity launch, the bundled home DOM and stylesheet, five navigation items, the native version/checksum, and real Java bridge responses. Attempt 2 also verified a genuine Android Words tap reaching the intended route. No Pocket Korean crash or uncaught JavaScript error was recorded in those completed checks.
+## Previous installed prototype
 
-**Android startup and ordinary screen presentation remain incompletely verified.** The latest [attempt 4, job 115042524193](https://github.com/JustPixelll/pocket-lab/actions/runs/38317169219/job/115042524193), using QA script `f3aa4ee59dff1d869ecc8e9ddba4a16573ec775c`, failed the cold-launch assertion: Android's `am start -W` returned `Status: timeout` after 13,088 ms. Android later logged the Activity as displayed at 15,956 ms after launch; the saved screen capture still shows the native splash. The crash buffer is empty and the final Activity dump shows the app focused and resumed. This attempt did not reach the DOM, bridge, or Words checks and is not counted as a pass. Its evidence is [artifact 11776804968](https://github.com/JustPixelll/pocket-lab/actions/runs/38317169219/artifacts/11776804968).
+Version `0.1.6` was built from `b800c5dfb105effd4448b1fdcb53abc07e5002db` in [build run 38316974838](https://github.com/JustPixelll/pocket-lab/actions/runs/38316974838). Compilation and Android lint passed. Its APK SHA-256 was `078958515dc4b1d58c557ca1c7b2ef1b553415c77cd235be40e28b03b5ee43be` (96,820,159 bytes).
 
-Earlier diagnostic images were captured during several seconds of emulator graphics backlog. Attempt 2 reached the correct Words route through a genuine Android tap, but its physical images showing the intended screens followed renderer screenshot requests. Attempt 3's passive home image showed the interface updating before any renderer screenshot, while an unrelated Pixel Launcher ANR obscured the app and blocked safe Words targeting. Together these establish successful app/bridge runs and delayed presentation in the emulator, but do not establish reliable ordinary launch and navigation. The cause of the inconsistent startup is not conclusively established, and phone performance remains unmeasured.
+The owner installed this version on a real phone and reported that the app almost completely works. Their screenshots show a handwriting service error and missing Korean text-to-speech/speech-language setup. That report confirms installation and ordinary interface use on their phone; it is not evidence of successful handwriting, microphone recognition, or spoken Korean audio.
 
-The fixture uses `-gpu swiftshader -feature -Vulkan`. It force-stops the previously observed setup package, `com.google.android.googlesdksetup`, before launch. It also contains a targeted stop for the background Pixel Launcher package, `com.google.android.apps.nexuslauncher`, after a successful Activity launch; attempt 4 failed before reaching that checkpoint. App crash, process continuity, and JavaScript error checks remain in place. No production repaint workaround was added to make a test image pass.
+The earlier [Android smoke run 38317169219](https://github.com/JustPixelll/pocket-lab/actions/runs/38317169219) had inconsistent cold-start presentation in its emulator. Some attempts established DOM loading, native bridge responses, and a real Android Words tap. Attempt 4 failed a cold-launch timeout at 13,088 ms, with the Activity later reported displayed at 15,956 ms and no app crash. Its evidence is [artifact 11776804968](https://github.com/JustPixelll/pocket-lab/actions/runs/38317169219/artifacts/11776804968). It is not counted as a reliable launch/presentation pass. No production repaint workaround was added.
 
-**Actual-phone checks remain:** installation and launch; microphone permission and Korean/English speech recognition; Korean spoken audio; model downloads; finger-drawn Korean recognition; translation quality; and operation offline after models are downloaded. Emulator capability flags report service availability, not successful recognition, speech playback, or translation inference.
+## Phone follow-up
+
+After exporting an old backup and installing the new test APK, import the backup if replacing it required uninstalling. Check a finger-drawn syllable after the Korean handwriting model is downloaded; Korean quest audio after installing a Korean TTS voice; and Korean/English microphone transcription using the phone's speech provider. The updated speech fallback permits the provider to use its supported language service when on-device recognition reports a missing language. Translation quality and offline operation still require checks on the actual phone.

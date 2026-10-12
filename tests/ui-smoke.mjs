@@ -50,6 +50,16 @@ try {
   const errors = [];
   const checks = [];
   page.on('pageerror', error => errors.push(error.message));
+  // Only the browser audio contract is stubbed: this checks routing and button
+  // independence, not whether a real phone has a Korean voice installed.
+  await page.addInitScript(() => {
+    window.__audioCalls = [];
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      getVoices: () => [{ lang: 'ko-KR', name: 'QA Korean voice' }],
+      cancel() {}, speak(value) { window.__audioCalls.push({ text: value.text, lang: value.lang }); },
+    } });
+  });
 
   async function fontsReady() {
     if (!fonts) return;
@@ -74,9 +84,10 @@ try {
 
   await page.goto(base, { waitUntil: 'networkidle' });
   await fontsReady();
-  await page.getByRole('heading', { name: 'A little Korean, every day.' }).waitFor();
-  await checkFit('Learn at 390px'); await shot('learn');
-  for (const area of ['Write', 'Speak', 'Words', 'Translate']) {
+  await page.getByRole('heading', { name: 'Home, little adventurer.' }).waitFor();
+  await checkFit('Home at 390px'); await shot('home');
+  assert.equal(await page.locator('.town-face').count(), 5);
+  for (const area of ['Learn', 'Write', 'Speak', 'Words', 'Translate']) {
     await nav(area); await checkFit(`${area} at 390px`); await shot(area.toLowerCase());
   }
 
@@ -109,26 +120,72 @@ try {
   checks.push('new vocabulary can be saved, searched and opened');
 
   await nav('Learn');
+  assert.equal(await page.locator('.quest-card').count(), 10);
+  checks.push('ten quests and five recurring townspeople');
   await page.locator('[data-action="open-lesson"][data-id="first-hello"]').click();
-  await page.getByRole('button', { name: 'Let’s try it', exact: true }).click();
-  await page.getByRole('button', { name: 'Try it in a sentence', exact: true }).click();
+  await page.getByRole('button', { name: 'Begin quest', exact: true }).click();
+  await shot('quest-intro');
+  await page.getByRole('button', { name: 'Step into the story', exact: true }).click();
+  assert.equal(await page.locator('.quest-scene .character-svg').count(), 2);
+  const audio = page.locator('.answer-option-row [data-action="play-korean"]').first();
+  const spokenText = await audio.getAttribute('data-text');
+  await audio.click();
+  assert.equal(await page.locator('.answer-option.selected').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.__audioCalls.at(-1)), { text: spokenText, lang: 'ko-KR' });
+  checks.push('Korean option audio leaves the answer unselected');
+  await shot('quest-challenge');
   const { LESSONS } = await import(pathToFileURL(path.join(assets, 'data/curriculum.js')).href);
   const lesson = LESSONS.find(item => item.id === 'first-hello');
-  for (const challenge of lesson.challenges) {
-    if (challenge.type === 'choose') await page.locator('[data-action="lesson-choice"]').filter({ hasText: challenge.answer }).click();
-    else for (const token of challenge.answer.split(' ')) await page.getByRole('button', { name: token, exact: true }).click();
-    await page.locator('[data-action="check-lesson"]').click();
-    assert.equal(await page.locator('[data-action="lesson-retry"]').count(), 0);
-    await page.locator('[data-action="lesson-next"]').click();
+  async function completeChallenges() {
+    for (const challenge of lesson.challenges) {
+      if (challenge.type === 'choose') await page.locator(`[data-action="lesson-choice"][data-index="${challenge.options.indexOf(challenge.answer)}"]`).click();
+      else for (const token of challenge.answer.split(' ')) await page.getByRole('button', { name: token, exact: true }).click();
+      await page.locator('[data-action="check-lesson"]').click();
+      assert.equal(await page.locator('[data-action="lesson-retry"]').count(), 0);
+      await page.locator('[data-action="lesson-next"]').click();
+    }
   }
+  await completeChallenges();
+  await shot('quest-finish');
   await page.locator('[data-action="finish-lesson"]').click();
   await page.locator('[data-id="first-hello"]').getByText('Revisit anytime', { exact: false }).waitFor();
-  checks.push('first adventure completes and records its progress');
+  await nav('Home');
+  assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 20);
+  checks.push('first quest saves completion and awards 20 coins');
+  await page.getByRole('button', { name: 'Little shop', exact: true }).click();
+  const beanie = page.locator('.shop-card[data-item="hat-beanie"]');
+  await beanie.getByRole('button', { name: 'Buy · 20 coins', exact: true }).click();
+  await beanie.getByRole('button', { name: 'Wearing', exact: true }).waitFor();
+  assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
+  await shot('shop');
+  await page.reload({ waitUntil: 'networkidle' }); await fontsReady();
+  await page.getByRole('button', { name: 'Wardrobe', exact: true }).click();
+  await page.locator('.shop-card[data-item="hat-beanie"]').getByRole('button', { name: 'Wearing', exact: true }).waitFor();
+  assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
+  await shot('wardrobe');
+  checks.push('hat purchase, balance and equipment survive reopening');
+
+  await nav('Learn');
+  const playerArt = await page.locator('.quest-scene .scene-person.player .character-svg').innerHTML();
+  assert.ok(playerArt.includes('#D79573'), 'the equipped beanie is visible in the quest scene');
+  await page.locator('[data-action="open-lesson"][data-id="first-hello"]').click();
+  await page.getByRole('button', { name: 'Revisit this quest', exact: true }).click();
+  await page.getByRole('button', { name: 'Step into the story', exact: true }).click();
+  await completeChallenges();
+  await page.getByRole('button', { name: 'Finish this visit', exact: true }).click();
+  await nav('Home');
+  assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
+  checks.push('quest revisit preserves the outfit and awards no duplicate coins');
 
   for (const width of [320, 768]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const area of ['Learn', 'Write', 'Speak', 'Words', 'Translate']) {
+    for (const area of ['Home', 'Learn', 'Write', 'Speak', 'Words', 'Translate']) {
       await nav(area); await checkFit(`${area} at ${width}px`);
+    }
+    await nav('Home');
+    for (const section of ['Little shop', 'Wardrobe']) {
+      await page.getByRole('button', { name: section, exact: true }).click();
+      await checkFit(`${section} at ${width}px`);
     }
   }
   assert.deepEqual(errors, []);

@@ -10,6 +10,8 @@ The lessons cover greetings, introductions, requests in a café, a game inventor
 
 The lesson bank is fixed and available offline. Its selection adapts to active vocabulary progress and completed lessons; it does not invent new grammar or generate unrestricted lesson content. It is a compact starting curriculum and has not undergone an independent native-speaker editorial review.
 
+The story update adds a reusable fictional cast and scene metadata to the same ten lessons. All existing vocabulary IDs, lesson IDs, prerequisites, grammar, and challenges are retained. The scene dialogue reuses Korean already present in the reviewed vocabulary examples, grammar examples, or valid challenge lines. Character names are fictional names written in Korean script; they are not new vocabulary targets.
+
 ## Sources used for checks
 
 General lexical reference: [National Institute of Korean Language, Korean–English Learners' Dictionary](https://krdict.korean.go.kr/eng/mainAction). The app links to this reference; it does not bundle the dictionary database or its audio recordings. Linking the dictionary as a general reference is not a claim that every authored example is a dictionary quotation.
@@ -55,6 +57,40 @@ Starting a lesson may add its `teachVocab` cards for later vocabulary practice. 
 
 Each challenge uses `{ id, type, prompt, ko?, answer, options, explanation, vocabIds }`. For `choose`, the answer is exactly one option. For `order`, options are unique space-delimited word blocks and their canonical joined order equals the answer. `acceptedAnswers` lists additional grammatical arrangements of those exact blocks. The first model is a straightforward beginner order; some alternatives place stronger emphasis on the earlier object, topic, or time. The app should compare an order response against both `answer` and `acceptedAnswers`. The list does not cover every possible paraphrase or different sentence construction.
 
+## Characters and quest scenes
+
+`CHARACTERS` is an exported object keyed by stable NPC IDs: `townkeeper`, `courier`, `cook`, `bookseller`, and `rival`. Each entry has `{ id, name, role, bio, appearance }`. The Korean `name` is not romanized. `role` and `bio` are English display text. Each character appears in two of the existing quests.
+
+`appearance` uses the player renderer's compatible shape:
+
+```js
+{
+  body: '#F5D4B3',
+  outfit: '#477764',
+  outfitStyle: 'scarf', // tee | scarf | hoodie | cape
+  accent: '#E7B563',
+  hat: 'beanie', // none | beanie | cap | wizard | flower-crown
+  hatColor: '#365F4F',
+  hatAccent: '#F4DFB3'
+}
+```
+
+Each lesson has a `quest` object:
+
+```js
+{
+  location, npcId, objective,
+  intro: { text, ko, en },
+  outro: { text, ko, en },
+  steps: [
+    { text, after: { ko, en } },
+    // Exactly four entries, aligned by index with the existing challenges.
+  ]
+}
+```
+
+`intro.text`, `outro.text`, and each step's `text` are short English narration. An introduction can use empty `ko` and `en` strings together when no prior line fits without giving away an answer. Render a step's `after` pair only after checking that challenge. It is a model practice line, often spoken by the learner, so do not always attribute it to the NPC. Opening and ending dialogue can be presented as NPC speech. The scenes add neither review evidence nor new prerequisites.
+
 ## Validation
 
-The curriculum tests check the lesson dependency graph, vocabulary reachability, the twelve-card starter set, Korean-only spellings and sound hints, answerability of every puzzle, preservation of spelling versus sound hints, actual progress-dependent recommendations, replay behavior, and lack of state mutation. They cannot replace a linguistic editorial review.
+The curriculum tests check the lesson dependency graph, vocabulary reachability, the twelve-card starter set, Korean-only spellings and sound hints, answerability of every puzzle, preservation of spelling versus sound hints, actual progress-dependent recommendations, replay behavior, and lack of state mutation. Scene tests additionally preserve the exact ten legacy lesson IDs, resolve every character reference, validate renderer-compatible appearances, align all four story beats with each lesson's challenges, and restrict scene dialogue to existing reviewed Korean. They cannot replace a linguistic editorial review.

@@ -434,8 +434,8 @@ try {
   report.ui = await checkpoint('home-dom-ready', () => until('Home DOM', async () => {
     const state = await evaluate(uiSnapshot);
     report.lastUi = state;
-    return state?.heading === 'A little Korean, every day.'
-      && state.navigation.length === 5 && state.visible && state.cssLoaded
+    return state?.heading === 'Home, little adventurer.'
+      && state.navigation.length === 6 && state.visible && state.cssLoaded
       && state.bridgePresent && state.appStarted && state.rootFrame
       && state.roots.app === 1 && state.roots.main === 1 && state.roots.nav === 1
       && state.loadingNodes === 0 && state.viewport.width > 0 && state.viewport.height > 0

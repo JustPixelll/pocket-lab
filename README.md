@@ -1,6 +1,6 @@
 # Pocket Korean · 한글 in your pocket
 
-A personal Android Korean-learning app for the `pocket-lab` project. It keeps a local vocabulary notebook and adds handwriting, spoken recall, a translator, and short adaptive lessons. Korean vocabulary and sound hints never use romanization.
+A personal Android Korean-learning app for the `pocket-lab` project. Keep a local vocabulary notebook, practice handwriting and spoken recall, translate useful phrases, and follow ten story quests with your own character. Learning earns coins for a small character shop. Korean vocabulary and sound hints never use romanization.
 
 ## Install on your Android phone
 
@@ -9,15 +9,24 @@ A personal Android Korean-learning app for the `pocket-lab` project. It keeps a 
 3. Download **Pocket-Korean-Android** from **Artifacts**. Extract the ZIP and open `Pocket-Korean.apk`.
 4. Allow your browser/file manager to install this app if Android asks. Check `BUILD-TYPE.txt`: the first prototype uses a disposable test key. Before replacing a test build, export your notebook; a new build may require uninstalling, reinstalling and importing it. Stable updates are available once protected signing secrets are configured.
 5. In Pocket Korean, open the top-right settings button and **Prepare both Korean models**. The initial translation and handwriting downloads need internet, approximately 50 MB together. A mobile connection can be used.
-6. Install a Korean text-to-speech voice in your phone's voice settings if Listen reports that one is missing. Grant microphone access when you first choose spoken practice.
+6. If a speaker button reports a missing Korean voice, open **Settings → Korean voice settings**, choose a speech engine that supports Korean, and download its Korean voice data. Return to the app and tap the speaker again; your quest stays where you left it. Translation and handwriting models are separate from spoken voices, so preparing those models does not install a Korean voice.
+7. Grant microphone access when you first choose spoken practice. Listening to Korean audio does not require microphone access.
 
 The minimum Android version is **Android 8.0 (API 26)**. Use an up-to-date Android System WebView. No Play Store listing, app account, server, or AI API key is needed.
 
-## The five areas
+## The six areas
+
+### Home
+
+Meet your character in **My corner**, give them a name, and dress them for the next quest. **Little shop** offers hats, outfits and scarves, and body colors; **Wardrobe** keeps everything you own. Starting clothes and several body colors are free. Paid cosmetics cost 20–80 coins and only change appearance. Your equipped character also appears in the quest scenes alongside a recurring cast of townspeople.
+
+Earn **20 coins the first time you complete each quest** and **10 coins the first time a word becomes green**. Replaying a quest or bringing a demoted word back to green does not award coins again. Existing completed quests and earlier mastery recorded in your review history receive their rewards once when your notebook is upgraded, including words that were green before a later missed review. There are no currency purchases.
 
 ### Learn
 
-Ten curated mini-adventures with 40 challenges. Each introduces one useful grammar pattern and a few words, then uses sentence-building or meaning-choice puzzles. Recommendations depend on practiced vocabulary and completed prerequisite lessons. Missing words get a focused warm-up. Existing handwritten/translated words can satisfy matching curriculum prerequisites.
+Exactly **10 curated story quests**, each with four short challenges, follow a recurring cast around town. Each quest gives you a small objective, Korean dialogue with English meanings, and a conclusion. It introduces one useful grammar pattern and a few words through sentence-building or meaning-choice puzzles. Speaker buttons in every quest let you hear Korean dialogue, vocabulary, examples, and model answers through the phone's Korean text-to-speech voice.
+
+Recommendations depend on practiced vocabulary and completed prerequisite quests. Missing words get a focused warm-up. Existing handwritten or translated words can satisfy matching curriculum prerequisites. Completed quests stay available to revisit, and earlier lesson completions keep their progress when upgraded to the story presentation.
 
 This version is a finite, reviewed lesson bank, not an unlimited text generator. It can choose a suitable next step and revisit material without inventing new grammar. Lessons do not automatically grant vocabulary mastery.
 
@@ -55,16 +64,18 @@ Machine-suggested vocabulary retains source metadata. The app does not invent pr
 
 ## Keep your notebook
 
-Progress is stored locally in the app's WebView storage. There is no app login or cloud vocabulary sync. Uninstalling/clearing app data removes it, so use **Settings → Export backup**. Backups include words, review events, lesson completions and preferences.
+Progress is stored locally in the app's WebView storage. There is no app login or cloud vocabulary sync. Uninstalling/clearing app data removes it, so use **Settings → Export backup**. Backups include words, review events, quest completions, preferences, your character's name and equipment, owned cosmetics, and the reward and purchase receipts used to calculate coins.
 
-Import merges rather than erases. Reimporting the same backup does not double-count reviews. An older backup cannot erase a later failed review or overwrite a newer vocabulary correction. Invalid/corrupted data and storage failures are surfaced without silently reseeding the notebook.
+Import merges rather than erases. The current schema 2 reads and upgrades earlier schema 1 notebooks and backups without resetting vocabulary or quest progress. Reimporting the same backup does not double-count reviews, coin rewards, or purchases. An older backup cannot erase a later failed review, overwrite a newer vocabulary correction, remove owned items, or revert a newer character choice. Invalid/corrupted data and storage failures are surfaced without silently reseeding the notebook; a failed write leaves the previous saved state intact.
+
+If separate copies spend the same earned coins on different items, merging keeps both items. Available coins stay at zero until future rewards cover that difference, then new rewards become spendable again.
 
 ## Development and verification
 
 The app is a Java Android shell plus bundled HTML/CSS/JavaScript. Native services expose a small JSON bridge. Assets load from Android's private HTTPS asset origin; the WebView does not load remote pages. See [native services](docs/native-services.md), [learning engine](docs/learning-engine.md), [curriculum sources](docs/curriculum-sources.md), and [verification](docs/verification.md).
 
 ```sh
-# Pure learning/curriculum tests, no dependencies or network needed
+# Learning, curriculum, coins and persistence tests; no dependencies or network needed
 npm test
 
 # Browser UI preview: native-only features explain that the APK is needed

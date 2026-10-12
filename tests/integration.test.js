@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import * as engine from '../app/src/main/assets/engine.js';
 import * as curriculum from '../app/src/main/assets/data/curriculum.js';
+import * as customization from '../app/src/main/assets/data/customization.js';
+import { characterSvg, sceneDecor } from '../app/src/main/assets/characters.js';
 
 // Exercise the actual app's event handlers against the real learning engine.
 // DOM layout and native platform behavior are covered separately by browser
@@ -74,7 +76,7 @@ function application() {
       return Object.fromEntries(Object.entries(actualStore).map(([key, fn]) => [key, (...args) => fn(...args.map(cloneInput))]));
     },
   };
-  const context = vm.createContext({ ...bridge, ...curriculum, document, location,
+  const context = vm.createContext({ ...bridge, ...curriculum, ...customization, characterSvg, sceneDecor, document, location,
     history: { replaceState(_a, _b, hash) { location.hash = hash; } },
     window: { addEventListener() {}, scrollTo() {} },
     localStorage: storage, isAndroid: false, icon: () => '',
@@ -89,6 +91,7 @@ function application() {
       navigate, newPractice, nextQuestion, submitAnswer, listenAnswer, translateText,
       collectTranslation, lessonsWithReadiness, browseVocab, wordForm, saveWord,
       checkWriting, showSettings, prepareModel, getWriting: () => writing,
+      getLessonRun: () => lessonRun,
     };`, context);
   return { ...context.testApp, storage, node,
     get store() { return actualStore; },
@@ -310,4 +313,80 @@ test('model preparation refreshes its original settings modal when it remains op
   await app.prepareModel('all', app.node('#prepare-button'));
   assert.ok(!app.node('#modal-root').innerHTML.includes('Download needed'));
   assert.ok(app.node('#modal-root').innerHTML.includes('>Ready</span>'));
+});
+
+test('quest audio plays Korean without choosing or grading an answer', async () => {
+  const app = application();
+  const calls = [];
+  app.native(async (action, payload) => { calls.push({ action, payload }); return {}; });
+  app.action('start-lesson', { id: 'first-hello' });
+  app.action('lesson-next');
+  app.action('lesson-choice', { index: '1' });
+  const choice = app.getLessonRun().choice;
+  const history = app.store.exportData();
+  await app.action('play-korean', { text: '감사합니다.' });
+  assert.equal(app.getLessonRun().choice, choice);
+  assert.equal(app.getLessonRun().index, 0);
+  assert.equal(app.getLessonRun().feedback, null);
+  assert.equal(app.store.exportData(), history);
+  const spoken = calls.find(call => call.action === 'speak');
+  assert.equal(spoken.payload.text, '감사합니다.');
+  assert.equal(spoken.payload.lang, 'ko-KR');
+});
+
+test('finishing a quest awards once and the character shop uses those saved coins', () => {
+  const app = application();
+  const quest = curriculum.LESSONS.find(item => item.id === 'first-hello');
+  function finish() {
+    app.action('start-lesson', { id: quest.id });
+    app.action('lesson-next');
+    for (const challenge of quest.challenges) {
+      if (challenge.type === 'choose') app.action('lesson-choice', { index: String(challenge.options.indexOf(challenge.answer)) });
+      else for (const token of challenge.answer.split(' ')) app.action('add-token', { index: String(challenge.options.indexOf(token)) });
+      app.action('check-lesson');
+      assert.equal(app.getLessonRun().feedback.correct, true);
+      app.action('lesson-next');
+    }
+    app.action('finish-lesson');
+  }
+  finish();
+  assert.equal(app.store.getProfile().coins, 20);
+  finish();
+  assert.equal(app.store.getProfile().coins, 20);
+  app.action('home-section', { section: 'shop' });
+  app.action('buy-item', { id: 'hat-beanie' });
+  assert.equal(app.store.getProfile().coins, 0);
+  assert.equal(app.store.getProfile().equipment.hat, 'hat-beanie');
+  app.action('buy-item', { id: 'hat-beanie' });
+  assert.equal(app.store.getProfile().totalSpent, 20);
+  assert.ok(app.node('#main').innerHTML.includes('Wearing'));
+});
+
+test('failed cosmetic persistence leaves the character and its coins unchanged', () => {
+  const app = application();
+  app.store.completeLesson('first-hello');
+  app.action('home-section', { section: 'shop' });
+  const before = app.store.getProfile();
+  app.storage.failWrite = true;
+  app.action('buy-item', { id: 'hat-beanie' });
+  assert.deepEqual(app.store.getProfile(), before);
+  assert.ok(app.node('#toast').textContent.includes('could not be saved'));
+});
+
+test('handwriting service errors stay visible and preserve the actual strokes', async () => {
+  const app = application();
+  app.navigate('write');
+  app.pointer('pointerdown', 15, 25);
+  app.pointer('pointermove', 85, 25);
+  app.pointer('pointerup', 85, 90);
+  const drawing = JSON.stringify(app.getWriting().strokes);
+  app.native(async action => {
+    if (action === 'recognizeInk') { const error = new Error('Prepare the Korean handwriting model.'); error.code = 'INK_RECOGNITION_FAILED'; throw error; }
+    return {};
+  });
+  await app.checkWriting(app.node('#check-writing'));
+  assert.equal(JSON.stringify(app.getWriting().strokes), drawing);
+  assert.ok(app.getWriting().feedback.includes('The handwriting service needs attention.'));
+  assert.ok(app.getWriting().feedback.includes('Prepare handwriting model'));
+  assert.ok(!app.getWriting().feedback.includes('Here’s what your phone could read.'));
 });
