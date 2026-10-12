@@ -217,6 +217,21 @@ try {
   }
   assert.equal(typeof report.capabilities.version, 'string');
   assert.ok(report.capabilities.version.length > 0, 'Native version is missing');
+
+  // A DOM update can precede its presentation on the Android WebView surface.
+  // Wait for browser frames, then allow the emulator's compositor a bounded settle.
+  report.presentation = await evaluate(async function () {
+    await new Promise(resolveFrame => {
+      requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+    });
+    return { animationFrames: 2, visible: document.visibilityState === 'visible' };
+  }, 15000);
+  assert.equal(report.presentation.visible, true, 'The WebView became hidden before painting');
+  report.presentation.compositorSettleMs = 3000;
+  await delay(report.presentation.compositorSettleMs);
+  report.uiBeforeCapture = await evaluate(uiSnapshot);
+  assert.deepEqual(report.uiBeforeCapture, report.ui, 'The home screen changed before capture');
+
   assert.deepEqual(cdp.exceptions, [], 'An uncaught JavaScript exception occurred');
   const stillRunning = await adb(['shell', 'pidof', packageName]);
   assert.ok(stillRunning.stdout.trim().split(/\s+/).includes(pid),

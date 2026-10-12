@@ -55,10 +55,17 @@ This gate does not request a microphone permission, download models, or perform 
 
 ## Latest prototype verification
 
-- **Final APK version, source commit, build result, size, and SHA-256: pending.** A native startup fix requires a new APK build before these identifiers can be recorded.
+- **APK version:** `0.1.5` (disposable debug signing).
+- **Built source:** `6b7968ea03f5c7243598adf22ebf4e45576a2de6`.
+- **Build and Android lint passed:** [build run 38313846943](https://github.com/JustPixelll/pocket-lab/actions/runs/38313846943). There are no lint errors; compatibility/update and trusted-WebView JavaScript warnings remain documented by the build report.
+- **APK:** `Pocket-Korean.apk`, 96,820,159 bytes. SHA-256: `9bd0ae67aac5224858df9d6908377a446baf8bbe8ff7030eb0b2fc5cc7730de9`. The downloaded ZIP and APK checksums match the published artifact metadata and checksum file.
 - **Logic and integration checks passed:** all 58 `npm test` tests, covering scheduling, persistence/imports, curriculum consistency, and app-handler regressions.
 - **Browser smoke passed:** all 18 checks, with zero uncaught page errors. Verified all five tabs at 320/390/768 pixels, typed-recall persistence, custom vocabulary saving/search/detail, and first-lesson completion.
 
-**Emulator startup verification is pending.** The preceding [smoke run 38312968060](https://github.com/JustPixelll/pocket-lab/actions/runs/38312968060) opened the bundled UI, found all five tabs, the stylesheet, and the native bridge, and found no application crash or JavaScript error. Its capabilities request timed out after 40 seconds during ML Kit's first-launch model catalog initialization. A fix will return the current capabilities immediately and refresh model availability in the background; the startup gate must pass against the new APK before startup is counted as verified.
+**Emulator startup passed:** [smoke run 38314013806](https://github.com/JustPixelll/pocket-lab/actions/runs/38314013806) installed and launched the APK on an Android 15 emulator. It verified the bundled home screen, all five navigation items, stylesheet, and a real native capabilities roundtrip, with no application crash or uncaught JavaScript error. The evidence artifact records the APK checksum, native version, response time, screenshot, and device logs. Capabilities returns immediately while optional model readiness is checked in the background.
+
+The first successful run confirmed the exact APK checksum and native version `0.1.5`; its capabilities roundtrip took 1,316 ms. Its physical screenshot captured an earlier loading frame despite the completed home DOM. A repeat display check with two animation frames and a bounded compositor settle is pending; the original screenshot is not counted as visual confirmation of the home screen.
+
+The emulator fixture force-stops its unrelated `com.google.android.googlesdksetup` setup package before launching Pocket Korean, following an observed setup-app ANR in an earlier run. Pocket Korean's crash and JavaScript error checks remain active.
 
 **Actual-phone checks remain:** APK installation and launch; microphone permission, Korean/English speech recognition, and Korean spoken audio; model downloads; finger-drawn Korean recognition; and translation quality plus behavior after models are downloaded and the phone is offline. The passing logic, browser, build, and lint checks do not establish these native capabilities on the user's phone.
