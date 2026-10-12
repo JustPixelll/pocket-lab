@@ -33,6 +33,9 @@ jobs:
           curl --fail --location --retry 2 'https://docs.cloud.google.com/static/translate/images/text-attribution.png' -o app/src/main/assets/google-translate-attribution.png
           python3 -c "from pathlib import Path; p=Path('app/src/main/assets/google-translate-attribution.png'); assert p.read_bytes().startswith(bytes.fromhex('89504e470d0a1a0a')), 'The Google attribution download was not a PNG'"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Install Android build tools
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
