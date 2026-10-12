@@ -38,6 +38,14 @@ Other events are `speechPartial {text}`, `listening {active,onDevice,mayUseNetwo
 `modelStatus {status,translationReady,inkReady}`, and `capabilities` with the same
 data as the action. Model statuses are `checked`, `downloading`, `ready`, or `error`.
 
+`capabilities` returns the current snapshot immediately, without awaiting ML Kit's
+first-launch model initialization or TTS initialization. Model readiness is false
+until a local check has confirmed it. Startup and capability requests share one
+background readiness check, whose completion emits `modelStatus` and `capabilities`.
+Explicit translation, ink, and post-download preparation checks always query fresh
+state; older asynchronous results cannot replace a newer completed readiness check.
+TTS initialization independently emits `capabilities` when its provider responds.
+
 ## Model preparation and limits
 
 - ML Kit dependencies: `com.google.mlkit:translate:17.0.3` and

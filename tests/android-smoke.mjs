@@ -162,6 +162,11 @@ try {
     'This gate is only for disposable debug APKs; release WebViews disable DevTools');
   await adb(['install', '-r', apkPath], { timeout: 90000 });
   // Do not grant RECORD_AUDIO or ask a voice/model service to perform inference.
+  // This emulator image's unrelated setup app produced an ANR over the first run.
+  // Stop that observed fixture package only; retain all Pocket Korean error checks.
+  const setupPackage = 'com.google.android.googlesdksetup';
+  await adb(['shell', 'am', 'force-stop', setupPackage]);
+  report.emulatorFixture = { forceStoppedPackages: [setupPackage] };
   await adb(['logcat', '-b', 'all', '-c']);
   await adb(['shell', 'am', 'force-stop', packageName]);
   const launch = await adb(['shell', 'am', 'start', '-W', '-n', packageName + '/.MainActivity'],
@@ -202,7 +207,9 @@ try {
   assert.equal(report.ui.title, 'Pocket Korean');
 
   // Java's capabilities deadline is 40s; allow its real success/error response to settle.
+  const capabilitiesStartedAt = Date.now();
   report.capabilities = await evaluate(nativeSnapshot, 45000);
+  report.capabilitiesRoundTripMs = Date.now() - capabilitiesStartedAt;
   assert.equal(report.capabilities.platform, 'android');
   for (const key of ['speechAvailable', 'onDeviceSpeechAvailable', 'ttsReady',
     'translationReady', 'inkReady']) {

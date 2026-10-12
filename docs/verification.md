@@ -52,3 +52,13 @@ node tests/android-smoke.mjs path/to/Pocket-Korean.apk android-smoke
 The adjacent `BUILD-TYPE.txt` must identify a disposable debug build. The check verifies the real Activity launch, bundled WebView page, stylesheet, five navigation items, and a native `capabilities` response. It checks for a surviving app process and application crashes. The artifact records the APK's SHA-256 alongside the result, device screenshot, and logs.
 
 This gate does not request a microphone permission, download models, or perform translation, ink recognition, or spoken audio. Those services can correctly report unavailable on a fresh emulator. Stable release builds disable WebView debugging, so this specific debug gate explicitly skips them; it does not mark them as device-tested.
+
+## Latest prototype verification
+
+- **Final APK version, source commit, build result, size, and SHA-256: pending.** A native startup fix requires a new APK build before these identifiers can be recorded.
+- **Logic and integration checks passed:** all 58 `npm test` tests, covering scheduling, persistence/imports, curriculum consistency, and app-handler regressions.
+- **Browser smoke passed:** all 18 checks, with zero uncaught page errors. Verified all five tabs at 320/390/768 pixels, typed-recall persistence, custom vocabulary saving/search/detail, and first-lesson completion.
+
+**Emulator startup verification is pending.** The preceding [smoke run 38312968060](https://github.com/JustPixelll/pocket-lab/actions/runs/38312968060) opened the bundled UI, found all five tabs, the stylesheet, and the native bridge, and found no application crash or JavaScript error. Its capabilities request timed out after 40 seconds during ML Kit's first-launch model catalog initialization. A fix will return the current capabilities immediately and refresh model availability in the background; the startup gate must pass against the new APK before startup is counted as verified.
+
+**Actual-phone checks remain:** APK installation and launch; microphone permission, Korean/English speech recognition, and Korean spoken audio; model downloads; finger-drawn Korean recognition; and translation quality plus behavior after models are downloaded and the phone is offline. The passing logic, browser, build, and lint checks do not establish these native capabilities on the user's phone.

@@ -115,6 +115,9 @@ public final class MainActivity extends Activity {
     private DigitalInkRecognizer inkRecognizer;
     private boolean translationReady;
     private boolean inkReady;
+    private boolean backgroundModelRefreshInFlight;
+    private long modelRefreshSerial;
+    private long appliedModelRefreshSerial;
     private String preparingRequestId;
 
     private SpeechRecognizer speech;
@@ -363,7 +366,9 @@ public final class MainActivity extends Activity {
         try {
             switch (action) {
                 case "capabilities":
-                    refreshModelState(() -> succeed(id, capabilities()));
+                    // Optional first-launch model setup must not delay the bridge handshake.
+                    succeed(id, capabilities());
+                    refreshModelState(null);
                     break;
                 case "speak": speak(id, payload); break;
                 case "stopSpeaking":
@@ -415,21 +420,32 @@ public final class MainActivity extends Activity {
 
     private void refreshModelState(Runnable after) {
         if (destroyed) return;
+        boolean background = after == null;
+        if (background && backgroundModelRefreshInFlight) return;
         if (modelManager == null) {
             translationReady = false;
             inkReady = false;
             if (after != null) after.run();
             return;
         }
+        // Explicit service actions always check afresh, especially after a model download.
+        if (background) backgroundModelRefreshInFlight = true;
+        long serial = ++modelRefreshSerial;
         Task<Boolean> translation = downloaded(translationModel);
         Task<Boolean> handwriting = downloaded(inkModel);
         Tasks.whenAllComplete(translation, handwriting).addOnCompleteListener(ignored -> {
             if (destroyed) return;
-            translationReady = enKo != null && koEn != null && translation.isSuccessful()
-                && Boolean.TRUE.equals(translation.getResult());
-            inkReady = inkRecognizer != null && handwriting.isSuccessful()
-                && Boolean.TRUE.equals(handwriting.getResult());
-            emitModelStatus(preparingRequestId == null ? "checked" : "downloading");
+            if (background) backgroundModelRefreshInFlight = false;
+            // A slow earlier check must not overwrite a newer completed readiness check.
+            if (serial >= appliedModelRefreshSerial) {
+                appliedModelRefreshSerial = serial;
+                translationReady = enKo != null && koEn != null && translation.isSuccessful()
+                    && Boolean.TRUE.equals(translation.getResult());
+                inkReady = inkRecognizer != null && handwriting.isSuccessful()
+                    && Boolean.TRUE.equals(handwriting.getResult());
+                emitModelStatus(preparingRequestId == null ? "checked" : "downloading");
+                emit("capabilities", capabilities());
+            }
             if (after != null) after.run();
         });
     }
