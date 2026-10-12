@@ -82,7 +82,7 @@ The source includes an original Google Translate attribution badge. The automate
 
 Actual microphone recognition, downloaded models, audio voices, and system installation need a real-device check. Browser service mocks only exercise the interface/bridge contract; they are not evidence that a phone's speech/model services work.
 
-The separate **Android startup smoke** workflow checks each successful disposable debug APK on an Android emulator, including a real native-service roundtrip. Its evidence artifact identifies the tested APK by SHA-256. This establishes startup and integration; speech providers, model downloads, and recognition still need a check on the phone where you will use the app.
+The separate **Android startup smoke** workflow checks each successful disposable debug APK on an Android emulator, including a real native-service roundtrip. Its evidence artifact identifies the tested APK by SHA-256. Automated assertions establish Activity launch, the loaded DOM, and bridge integration; physical screen captures require visual review. See [verification](docs/verification.md) for the current presentation result. Speech providers, model downloads, and recognition still need a check on the phone where you will use the app.
 
 ## Sources and attribution
 
