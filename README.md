@@ -61,7 +61,7 @@ Import merges rather than erases. Reimporting the same backup does not double-co
 
 ## Development and verification
 
-The app is a Java Android shell plus bundled HTML/CSS/JavaScript. Native services expose a small JSON bridge. Assets load from Android's private HTTPS asset origin; the WebView does not load remote pages. See [native services](docs/native-services.md), [learning engine](docs/learning-engine.md), and [curriculum sources](docs/curriculum-sources.md).
+The app is a Java Android shell plus bundled HTML/CSS/JavaScript. Native services expose a small JSON bridge. Assets load from Android's private HTTPS asset origin; the WebView does not load remote pages. See [native services](docs/native-services.md), [learning engine](docs/learning-engine.md), [curriculum sources](docs/curriculum-sources.md), and [verification](docs/verification.md).
 
 ```sh
 # Pure learning/curriculum tests, no dependencies or network needed
@@ -81,6 +81,8 @@ For seamless personal updates, the workflow already supports a stable release id
 The build downloads Google's official translation attribution image from its documented source and verifies the PNG signature before packaging. The attribution image is included in the build artifact for inspection.
 
 Actual microphone recognition, downloaded models, audio voices, and system installation need a real-device check. Browser service mocks only exercise the interface/bridge contract; they are not evidence that a phone's speech/model services work.
+
+The separate **Android startup smoke** workflow checks each successful disposable debug APK on an Android emulator, including a real native-service roundtrip. Its evidence artifact identifies the tested APK by SHA-256. This establishes startup and integration; speech providers, model downloads, and recognition still need a check on the phone where you will use the app.
 
 ## Sources and attribution
 

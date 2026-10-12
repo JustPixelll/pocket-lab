@@ -97,6 +97,14 @@ and TTS. It does not cancel a document picker or a model download. Cancelling th
 picker returns `CANCELLED`; no broad storage permission is requested. Import and
 export use Android's Storage Access Framework and background file I/O.
 
+Automatic Android backup is disabled with `allowBackup="false"`. The legacy
+`backup_rules.xml` excludes every supported storage domain on Android 11 and
+earlier. On Android 12+, `data_extraction_rules.xml` separately excludes all
+domains from cloud backup and device-to-device transfer, including private
+WebView state and device-protected storage. Explicit transfer rules are needed
+because some manufacturers do not apply `allowBackup="false"` to device transfer.
+The app's manual JSON export/import uses the learner's chosen document location.
+
 Request deadlines are 40 seconds normally and 290 seconds for model preparation
 or selecting a document, just before the UI's own deadlines. A timed-out model download may
 still complete through ML Kit and will update capability state. Closing the
@@ -131,6 +139,7 @@ response; the setting does not prevent WebViewAssetLoader from serving assets.
 - [TextToSpeech](https://developer.android.com/reference/android/speech/tts/TextToSpeech)
 - [Voice](https://developer.android.com/reference/android/speech/tts/Voice)
 - [WebViewAssetLoader](https://developer.android.com/reference/androidx/webkit/WebViewAssetLoader)
+- [Android backup rules and valid storage domains](https://developer.android.com/identity/data/autobackup)
 - [Chromium WebView request interception](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/android_webview/browser/network_service/aw_proxying_url_loader_factory.cc)
 - [Chromium WebView network-blocking flags](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/android_webview/browser/network_service/net_helpers.cc)
 

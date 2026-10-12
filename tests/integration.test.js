@@ -100,6 +100,11 @@ function application() {
     pointer(type, x = 20, y = 30) {
       node('#ink-canvas').emit(type, { isPrimary: true, pointerId: 1, clientX: x, clientY: y, preventDefault() {} });
     },
+    dispatch(type, target) {
+      const event = { target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+      for (const handler of handlers.get(type) ?? []) handler(event);
+      return event;
+    },
   };
 }
 
@@ -220,6 +225,31 @@ test('machine-translation form saves provenance and leaves an unverified hint em
   assert.deepEqual(card.sourceIds, ['google-translate']);
   assert.equal(card.pronunciation, '');
   assert.equal(card.status, 'new');
+});
+
+test('modal form clicks preserve default submission while direct backdrop clicks still close', () => {
+  const app = application();
+  app.wordForm();
+  const form = app.node('#word-form'); form.dataset = { editId: '', source: 'custom' };
+  app.node('#new-ko').value = '강아지';
+  app.node('#new-en').value = 'puppy';
+  app.node('#new-aliases').value = '';
+  app.node('#new-pronunciation').value = '';
+  app.node('#new-note').value = '';
+  const backdrop = { dataset: { action: 'close-backdrop' }, closest() { return this; } };
+  const submitButton = { type: 'submit', closest: () => backdrop };
+
+  const click = app.dispatch('click', submitButton);
+  assert.equal(click.defaultPrevented, false, 'The backdrop delegate must allow the button default action.');
+  assert.ok(app.node('#modal-root').childElementCount > 0, 'Clicking inside the dialog must keep it open.');
+  // A real browser follows this uncancelled activation with the form submit.
+  app.dispatch('submit', form);
+  assert.ok(app.store.getCards().some(card => card.ko === '강아지' && card.en === 'puppy'));
+  assert.equal(app.node('#modal-root').childElementCount, 0);
+
+  app.wordForm();
+  app.dispatch('click', backdrop);
+  assert.equal(app.node('#modal-root').childElementCount, 0, 'Clicking the backdrop itself still closes the dialog.');
 });
 
 test('handwriting feedback still applies when the recognized drawing is unchanged', async () => {
