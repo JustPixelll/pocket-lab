@@ -78,7 +78,7 @@ GitHub Actions runs tests, compiles/lints the Android app, and attaches the inst
 
 For seamless personal updates, the workflow already supports a stable release identity supplied through protected GitHub Actions secrets: `POCKET_KEYSTORE_BASE64`, `POCKET_KEYSTORE_PASSWORD`, `POCKET_KEY_ALIAS`, and `POCKET_KEY_PASSWORD`. These have not been configured by this project. With them present, the workflow writes the key only to its temporary runner directory, builds a signed release, then deletes the temporary key. Do not put keys in source files, issues, logs, or chat.
 
-The build downloads Google's official translation attribution image from its documented source and verifies the PNG signature before packaging. The attribution image is included in the build artifact for inspection.
+The build downloads Google's official translation badge archive, selects an original PNG badge, and logs its name and checksum before packaging. The unmodified attribution image is included in the build artifact for inspection.
 
 Actual microphone recognition, downloaded models, audio voices, and system installation need a real-device check. Browser service mocks only exercise the interface/bridge contract; they are not evidence that a phone's speech/model services work.
 

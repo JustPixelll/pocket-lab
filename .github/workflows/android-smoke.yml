@@ -52,10 +52,10 @@ jobs:
         id: build_type
         run: |
           test -f "$RUNNER_TEMP/apk/BUILD-TYPE.txt"
-          if rg -q '^Disposable debug signing\.' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"; then
+          if grep -q '^Disposable debug signing\.' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"; then
             echo 'debug=true' >> "$GITHUB_OUTPUT"
           else
-            rg -q '^Stable signing from' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"
+            grep -q '^Stable signing from' "$RUNNER_TEMP/apk/BUILD-TYPE.txt"
             echo 'debug=false' >> "$GITHUB_OUTPUT"
             echo 'Smoke test not run: this gate requires a debug WebView. The stable release APK was not tested by this gate.' >> "$GITHUB_STEP_SUMMARY"
           fi

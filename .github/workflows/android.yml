@@ -30,8 +30,8 @@ jobs:
           java-version: '17'
       - name: Bundle official Google Translate attribution
         run: |
-          curl --fail --location --retry 2 'https://docs.cloud.google.com/static/translate/images/text-attribution.png' -o app/src/main/assets/google-translate-attribution.png
-          python3 -c "from pathlib import Path; p=Path('app/src/main/assets/google-translate-attribution.png'); assert p.read_bytes().startswith(bytes.fromhex('89504e470d0a1a0a')), 'The Google attribution download was not a PNG'"
+          curl --fail --location --retry 2 'https://docs.cloud.google.com/static/translate/images/google-translate-attribution.zip' -o "$RUNNER_TEMP/google-translate-attribution.zip"
+          python3 scripts/bundle-translation-attribution.py "$RUNNER_TEMP/google-translate-attribution.zip" app/src/main/assets/google-translate-attribution.png
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
