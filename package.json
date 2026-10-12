@@ -1,0 +1,12 @@
+{
+  "name": "pocket-korean",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A personal Android Korean learning notebook, with local vocabulary, speech practice, handwriting and translation.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "preview": "python3 -m http.server 4173 --directory app/src/main/assets"
+  },
+  "engines": { "node": ">=20" }
+}

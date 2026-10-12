@@ -1,0 +1,42 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'net.pocketlab.korean'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'net.pocketlab.korean'
+        minSdk 26
+        targetSdk 35
+        versionCode Integer.parseInt(System.getenv('POCKET_BUILD_NUMBER') ?: '1')
+        versionName '0.1.' + (System.getenv('POCKET_BUILD_NUMBER') ?: '0')
+    }
+    signingConfigs {
+        personalRelease {
+            if (System.getenv('POCKET_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('POCKET_KEYSTORE_PATH'))
+                storePassword System.getenv('POCKET_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('POCKET_KEY_ALIAS')
+                keyPassword System.getenv('POCKET_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { /* Standard disposable debug signing; no key is stored in the repository. */ }
+        release {
+            minifyEnabled false
+            if (System.getenv('POCKET_KEYSTORE_PATH')) signingConfig signingConfigs.personalRelease
+        }
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError true }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'com.google.mlkit:translate:17.0.3'
+    implementation 'com.google.mlkit:digital-ink-recognition:19.0.0'
+}

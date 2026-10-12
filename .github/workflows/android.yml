@@ -1,0 +1,81 @@
+name: Build Pocket Korean
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocket-korean-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test vocabulary, backups and curriculum
+        run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Bundle official Google Translate attribution
+        run: |
+          curl --fail --location --retry 2 'https://docs.cloud.google.com/static/translate/images/text-attribution.png' -o app/src/main/assets/google-translate-attribution.png
+          python3 -c "from pathlib import Path; p=Path('app/src/main/assets/google-translate-attribution.png'); assert p.read_bytes().startswith(bytes.fromhex('89504e470d0a1a0a')), 'The Google attribution download was not a PNG'"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and lint the personal APK
+        env:
+          POCKET_BUILD_NUMBER: ${{ github.run_number }}
+          POCKET_KEYSTORE_BASE64: ${{ secrets.POCKET_KEYSTORE_BASE64 }}
+          POCKET_KEYSTORE_PASSWORD: ${{ secrets.POCKET_KEYSTORE_PASSWORD }}
+          POCKET_KEY_ALIAS: ${{ secrets.POCKET_KEY_ALIAS }}
+          POCKET_KEY_PASSWORD: ${{ secrets.POCKET_KEY_PASSWORD }}
+        run: |
+          mkdir -p deliverables
+          if [ -n "$POCKET_KEYSTORE_BASE64" ]; then
+            export POCKET_KEYSTORE_PATH="$RUNNER_TEMP/pocket-korean-signing.jks"
+            trap 'rm -f "$POCKET_KEYSTORE_PATH"' EXIT
+            printf '%s' "$POCKET_KEYSTORE_BASE64" | base64 --decode > "$POCKET_KEYSTORE_PATH"
+            chmod 600 "$POCKET_KEYSTORE_PATH"
+            gradle --no-daemon :app:assembleRelease :app:lintRelease
+            cp app/build/outputs/apk/release/app-release.apk deliverables/Pocket-Korean.apk
+            printf 'Stable signing from protected GitHub Actions secrets.\n' > deliverables/BUILD-TYPE.txt
+          else
+            gradle --no-daemon :app:assembleDebug :app:lintDebug
+            cp app/build/outputs/apk/debug/app-debug.apk deliverables/Pocket-Korean.apk
+            printf 'Disposable debug signing. Export a backup before replacing this build; future builds may require reinstalling.\n' > deliverables/BUILD-TYPE.txt
+          fi
+      - name: Name the installable app
+        run: |
+          mkdir -p deliverables
+          sha256sum deliverables/Pocket-Korean.apk > deliverables/SHA256SUMS.txt
+          cp app/src/main/assets/google-translate-attribution.png deliverables/google-translate-attribution.png
+      - name: Downloadable Android app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Korean-Android
+          path: deliverables/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Android lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-lint-report
+          path: app/build/reports/lint-results-*.html
+          if-no-files-found: ignore

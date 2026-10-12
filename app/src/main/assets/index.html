@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f7f1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Pocket Korean</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#learn" aria-label="Pocket Korean home"><span class="brand-mark" lang="ko">한</span><span>pocket<span class="brand-second">korean</span></span></a>
+      <div class="top-actions"><span id="streak" class="streak" aria-label="Learning streak"></span><button id="settings-button" class="icon-button" aria-label="Settings and backups"></button></div>
+    </header>
+    <main id="main" tabindex="-1"><div class="loading-screen"><span lang="ko">한</span><p>Opening your notebook…</p></div></main>
+    <nav id="nav" class="bottom-nav" aria-label="Main navigation"></nav>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

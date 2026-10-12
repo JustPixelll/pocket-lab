@@ -1,0 +1,15 @@
+.gradle/
+build/
+app/build/
+local.properties
+node_modules/
+test-results/
+*.apk
+*.aab
+*.hprof
+*.keystore
+*.jks
+dev/
+.idea/
+*.iml
+.DS_Store

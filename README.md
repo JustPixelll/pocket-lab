@@ -7,7 +7,7 @@ A personal Android Korean-learning app for the `pocket-lab` project. It keeps a 
 1. Open this repository's **Actions** tab while signed into the GitHub account that owns it.
 2. Open the latest successful **Build Pocket Korean** run.
 3. Download **Pocket-Korean-Android** from **Artifacts**. Extract the ZIP and open `Pocket-Korean.apk`.
-4. Allow your browser/file manager to install this app if Android asks. Install updates over the existing app; do not uninstall first.
+4. Allow your browser/file manager to install this app if Android asks. Check `BUILD-TYPE.txt`: the first prototype uses a disposable test key. Before replacing a test build, export your notebook; a new build may require uninstalling, reinstalling and importing it. Stable updates are available once protected signing secrets are configured.
 5. In Pocket Korean, open the top-right settings button and **Prepare both Korean models**. The initial translation and handwriting downloads need internet, approximately 50 MB together. A mobile connection can be used.
 6. Install a Korean text-to-speech voice in your phone's voice settings if Listen reports that one is missing. Grant microphone access when you first choose spoken practice.
 
@@ -74,7 +74,11 @@ npm run preview
 gradle :app:assembleDebug :app:lintDebug
 ```
 
-GitHub Actions runs tests, compiles/lints the Android app, and attaches the installable APK. This repository deliberately includes a **development-only signing key** in `dev/personal-debug.keystore`, so personal build updates keep the same Android identity instead of requiring uninstalling. The alias/password are standard debug values. Anyone with that file can sign development builds; it is not a production/release signing identity and must never be reused for public distribution.
+GitHub Actions runs tests, compiles/lints the Android app, and attaches the installable APK. **No signing keys are committed.** By default each runner creates a disposable Android debug key, so builds from different runs may not install over one another. Export/import preserves your notebook when replacing such builds.
+
+For seamless personal updates, the workflow already supports a stable release identity supplied through protected GitHub Actions secrets: `POCKET_KEYSTORE_BASE64`, `POCKET_KEYSTORE_PASSWORD`, `POCKET_KEY_ALIAS`, and `POCKET_KEY_PASSWORD`. These have not been configured by this project. With them present, the workflow writes the key only to its temporary runner directory, builds a signed release, then deletes the temporary key. Do not put keys in source files, issues, logs, or chat.
+
+The build downloads Google's official translation attribution image from its documented source and verifies the PNG signature before packaging. The attribution image is included in the build artifact for inspection.
 
 Actual microphone recognition, downloaded models, audio voices, and system installation need a real-device check. Browser service mocks only exercise the interface/bridge contract; they are not evidence that a phone's speech/model services work.
 
