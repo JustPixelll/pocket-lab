@@ -172,28 +172,55 @@ test('time-first and place-first grammatical arrangements are explicitly accepte
 });
 
 test('story quests retain all ten existing lesson IDs used by saved progress', () => {
-  assert.deepEqual(LESSONS.map(lesson => lesson.id), [
-    'first-hello', 'name-badge', 'cafe-stop', 'inventory', 'find-the-cafe',
-    'lunch-break', 'small-plan', 'play-together', 'language-mission', 'pack-the-quest',
-  ]);
+  const legacyChallengePrefixes = [
+    ['first-hello', 'hello'], ['name-badge', 'badge'], ['cafe-stop', 'cafe'],
+    ['inventory', 'inventory'], ['find-the-cafe', 'map'], ['lunch-break', 'lunch'],
+    ['small-plan', 'plan'], ['play-together', 'play'], ['language-mission', 'language'],
+    ['pack-the-quest', 'pack'],
+  ];
+  assert.deepEqual(LESSONS.map(lesson => lesson.id), legacyChallengePrefixes.map(([id]) => id));
+  for (const [id, prefix] of legacyChallengePrefixes) {
+    assert.deepEqual(lessonById[id].challenges.map(challenge => challenge.id), [1, 2, 3, 4].map(number => `${prefix}-${number}`), `${id}: preserve the four existing challenges`);
+  }
   assert.ok(LESSONS.every(lesson => lesson.quest), 'Every existing lesson needs a scene');
 });
 
 test('recurring characters have Korean names and supported geometric appearances', () => {
   const expectedCharacterIds = ['townkeeper', 'courier', 'cook', 'bookseller', 'rival'];
+  const requiredAppearanceKeys = ['body', 'outfit', 'outfitStyle', 'accent', 'hat', 'hatColor', 'hatAccent'];
+  const optionalAppearanceFields = {
+    archetype: ['quartermaster', 'scout', 'provisioner', 'archivist', 'delver'],
+    expression: ['stern', 'focused', 'skeptical', 'calm', 'smirk'],
+    signatureProp: ['ledger', 'compass', 'ladle', 'scroll', 'sword'],
+  };
   assert.deepEqual(Object.keys(CHARACTERS).sort(), expectedCharacterIds.sort());
   for (const [id, character] of Object.entries(CHARACTERS)) {
     assert.equal(character.id, id, `${id}: registry identity mismatch`);
     assert.match(character.name, /^[가-힣]+$/u, `${id}: character names must use Korean script`);
     assert.ok(character.role.trim() && character.bio.trim(), `${id}: missing reusable town-notebook text`);
     const appearance = character.appearance;
-    assert.deepEqual(Object.keys(appearance).sort(), ['body', 'outfit', 'outfitStyle', 'accent', 'hat', 'hatColor', 'hatAccent'].sort());
+    assert.deepEqual(Object.keys(appearance).filter(key => !Object.hasOwn(optionalAppearanceFields, key)).sort(), [...requiredAppearanceKeys].sort());
+    for (const [field, supported] of Object.entries(optionalAppearanceFields)) {
+      if (Object.hasOwn(appearance, field)) assert.ok(supported.includes(appearance[field]), `${id}: unsupported ${field}`);
+    }
     for (const color of ['body', 'outfit', 'accent', 'hatColor', 'hatAccent']) {
       assert.match(appearance[color], /^#[0-9A-Fa-f]{6}$/, `${id}: unsupported ${color} color`);
     }
     assert.ok(['tee', 'scarf', 'hoodie', 'cape'].includes(appearance.outfitStyle), `${id}: unsupported outfit`);
     assert.ok(['none', 'beanie', 'cap', 'wizard', 'flower-crown'].includes(appearance.hat), `${id}: unsupported hat`);
     assert.equal(LESSONS.filter(lesson => lesson.quest.npcId === id).length, 2, `${id}: character should recur in two existing quests`);
+  }
+});
+
+test('the recurring fantasy cast provides distinct role silhouettes and signature props', () => {
+  const propByArchetype = {
+    quartermaster: 'ledger', scout: 'compass', provisioner: 'ladle', archivist: 'scroll', delver: 'sword',
+  };
+  const appearances = Object.values(CHARACTERS).map(character => character.appearance);
+  assert.deepEqual(appearances.map(appearance => appearance.archetype).sort(), Object.keys(propByArchetype).sort());
+  for (const appearance of appearances) {
+    assert.ok(appearance.expression, `${appearance.archetype}: missing facial treatment`);
+    assert.equal(appearance.signatureProp, propByArchetype[appearance.archetype], `${appearance.archetype}: mismatched portrait prop`);
   }
 });
 

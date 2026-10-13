@@ -1,4 +1,4 @@
-/** Small, offline cosmetic catalogue. IDs and prices are part of saved purchase receipts. */
+/** Offline travel equipment catalogue. IDs and prices are part of saved purchase receipts. */
 export const COSMETIC_SLOTS = Object.freeze(['hat', 'outfit', 'body']);
 export const DEFAULT_CHARACTER_NAME = '콩이';
 export const DEFAULT_EQUIPMENT = Object.freeze({
@@ -6,21 +6,21 @@ export const DEFAULT_EQUIPMENT = Object.freeze({
 });
 
 export const COSMETICS = Object.freeze([
-  { id: 'hat-none', slot: 'hat', name: 'No hat', price: 0, style: 'none', color: '#2D654D', accent: '#F0D18D' },
-  { id: 'hat-beanie', slot: 'hat', name: 'Cozy beanie', price: 20, style: 'beanie', color: '#D79573', accent: '#B97256' },
-  { id: 'hat-cap', slot: 'hat', name: 'Explorer cap', price: 30, style: 'cap', color: '#5C83AB', accent: '#395F85' },
-  { id: 'hat-wizard', slot: 'hat', name: 'Little wizard', price: 80, style: 'wizard', color: '#66548B', accent: '#F0CF72' },
-  { id: 'hat-flower-crown', slot: 'hat', name: 'Flower crown', price: 60, style: 'flower-crown', color: '#E7AEAA', accent: '#759B6B' },
-  { id: 'outfit-tee', slot: 'outfit', name: 'Everyday tee', price: 0, style: 'tee', color: '#EBDEC6', accent: '#CFB68E' },
-  { id: 'outfit-scarf', slot: 'outfit', name: 'Golden scarf', price: 20, style: 'scarf', color: '#D79758', accent: '#B6783F' },
-  { id: 'outfit-hoodie', slot: 'outfit', name: 'Garden hoodie', price: 40, style: 'hoodie', color: '#7C9F91', accent: '#537B6C' },
-  { id: 'outfit-cape', slot: 'outfit', name: 'Adventure cape', price: 60, style: 'cape', color: '#879CB9', accent: '#F0D18D' },
-  { id: 'body-cream', slot: 'body', name: 'Warm cream', price: 0, style: 'solid', color: '#F0D6AF', accent: '#D6AD80' },
-  { id: 'body-sand', slot: 'body', name: 'Golden sand', price: 0, style: 'solid', color: '#C6916C', accent: '#AA7353' },
-  { id: 'body-cocoa', slot: 'body', name: 'Warm cocoa', price: 0, style: 'solid', color: '#815442', accent: '#5F3C31' },
-  { id: 'body-mint', slot: 'body', name: 'Mint leaf', price: 20, style: 'solid', color: '#BFD6B5', accent: '#8FB184' },
-  { id: 'body-peach', slot: 'body', name: 'Peach blossom', price: 20, style: 'solid', color: '#E8B9AB', accent: '#CC9184' },
-  { id: 'body-lavender', slot: 'body', name: 'Lavender cloud', price: 30, style: 'solid', color: '#CCBEDE', accent: '#A38CBA' },
+  { id: 'hat-none', slot: 'hat', name: 'No hat', price: 0, style: 'none', color: '#34463B', accent: '#C39A63' },
+  { id: 'hat-beanie', slot: 'hat', name: 'Wool cap', price: 20, style: 'beanie', color: '#79634B', accent: '#4E4133' },
+  { id: 'hat-cap', slot: 'hat', name: 'Scout cap', price: 30, style: 'cap', color: '#4D624B', accent: '#A7794F' },
+  { id: 'hat-wizard', slot: 'hat', name: "Mage's hat", price: 80, style: 'wizard', color: '#303842', accent: '#BB8D53' },
+  { id: 'hat-flower-crown', slot: 'hat', name: 'Wildflower circlet', price: 60, style: 'flower-crown', color: '#D3BC87', accent: '#536548' },
+  { id: 'outfit-tee', slot: 'outfit', name: 'Travel tunic', price: 0, style: 'tee', color: '#C5AD86', accent: '#80654A' },
+  { id: 'outfit-scarf', slot: 'outfit', name: 'Ranger wrap', price: 20, style: 'scarf', color: '#B27749', accent: '#684832' },
+  { id: 'outfit-hoodie', slot: 'outfit', name: 'Trail coat', price: 40, style: 'hoodie', color: '#435846', accent: '#2A3E32' },
+  { id: 'outfit-cape', slot: 'outfit', name: "Adventurer's cloak", price: 60, style: 'cape', color: '#4A4540', accent: '#B78A52' },
+  { id: 'body-cream', slot: 'body', name: 'Parchment', price: 0, style: 'solid', color: '#DFC3A1', accent: '#A97A54' },
+  { id: 'body-sand', slot: 'body', name: 'Sandstone', price: 0, style: 'solid', color: '#B98155', accent: '#895735' },
+  { id: 'body-cocoa', slot: 'body', name: 'Umber', price: 0, style: 'solid', color: '#76513D', accent: '#4D3328' },
+  { id: 'body-mint', slot: 'body', name: 'Forest', price: 20, style: 'solid', color: '#78856A', accent: '#495A40' },
+  { id: 'body-peach', slot: 'body', name: 'Copper', price: 20, style: 'solid', color: '#B37855', accent: '#7B4D36' },
+  { id: 'body-lavender', slot: 'body', name: 'Slate', price: 30, style: 'solid', color: '#78818A', accent: '#505964' },
 ].map(item => Object.freeze(item)));
 
 export const COSMETIC_BY_ID = Object.freeze(Object.fromEntries(COSMETICS.map(item => [item.id, item])));

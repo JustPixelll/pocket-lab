@@ -84,9 +84,19 @@ try {
 
   await page.goto(base, { waitUntil: 'networkidle' });
   await fontsReady();
-  await page.getByRole('heading', { name: 'Home, little adventurer.' }).waitFor();
+  await page.getByRole('heading', { name: 'Camp.' }).waitFor();
   await checkFit('Home at 390px'); await shot('home');
+  await page.getByRole('button', { name: 'Codex', exact: false }).click();
+  await shot('codex');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   assert.equal(await page.locator('.town-face').count(), 5);
+  await page.locator('#settings-button').click();
+  await page.getByRole('button', { name: 'Get app updates', exact: true }).click();
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await page.getByRole('dialog').getByText('Version checks are available in the installed Android app. You can open All releases here.', { exact: true }).waitFor();
+  await checkFit('Updates dialog at 390px'); await shot('updates');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  checks.push('update browser fallback keeps a usable release link and retry');
   for (const area of ['Learn', 'Write', 'Speak', 'Words', 'Translate']) {
     await nav(area); await checkFit(`${area} at 390px`); await shot(area.toLowerCase());
   }
@@ -123,9 +133,9 @@ try {
   assert.equal(await page.locator('.quest-card').count(), 10);
   checks.push('ten quests and five recurring townspeople');
   await page.locator('[data-action="open-lesson"][data-id="first-hello"]').click();
-  await page.getByRole('button', { name: 'Begin quest', exact: true }).click();
+  await page.getByRole('button', { name: 'Accept contract', exact: true }).click();
   await shot('quest-intro');
-  await page.getByRole('button', { name: 'Step into the story', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue quest', exact: true }).click();
   assert.equal(await page.locator('.quest-scene .character-svg').count(), 2);
   const audio = page.locator('.answer-option-row [data-action="play-korean"]').first();
   const spokenText = await audio.getAttribute('data-text');
@@ -148,31 +158,30 @@ try {
   await completeChallenges();
   await shot('quest-finish');
   await page.locator('[data-action="finish-lesson"]').click();
-  await page.locator('[data-id="first-hello"]').getByText('Revisit anytime', { exact: false }).waitFor();
+  await page.locator('[data-id="first-hello"]').getByText('Completed · replay', { exact: false }).waitFor();
   await nav('Home');
   assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 20);
   checks.push('first quest saves completion and awards 20 coins');
-  await page.getByRole('button', { name: 'Little shop', exact: true }).click();
+  await page.getByRole('button', { name: 'Outfitter', exact: true }).click();
   const beanie = page.locator('.shop-card[data-item="hat-beanie"]');
   await beanie.getByRole('button', { name: 'Buy · 20 coins', exact: true }).click();
-  await beanie.getByRole('button', { name: 'Wearing', exact: true }).waitFor();
+  await beanie.getByRole('button', { name: 'Equipped', exact: true }).waitFor();
   assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
   await shot('shop');
   await page.reload({ waitUntil: 'networkidle' }); await fontsReady();
-  await page.getByRole('button', { name: 'Wardrobe', exact: true }).click();
-  await page.locator('.shop-card[data-item="hat-beanie"]').getByRole('button', { name: 'Wearing', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Equipment', exact: true }).click();
+  await page.locator('.shop-card[data-item="hat-beanie"]').getByRole('button', { name: 'Equipped', exact: true }).waitFor();
   assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
   await shot('wardrobe');
   checks.push('hat purchase, balance and equipment survive reopening');
 
   await nav('Learn');
-  const playerArt = await page.locator('.quest-scene .scene-person.player .character-svg').innerHTML();
-  assert.ok(playerArt.includes('#D79573'), 'the equipped beanie is visible in the quest scene');
+  assert.equal(await page.locator('.quest-scene .scene-person.player .character-svg').getAttribute('data-hat'), 'beanie', 'the equipped cap is visible in the quest scene');
   await page.locator('[data-action="open-lesson"][data-id="first-hello"]').click();
-  await page.getByRole('button', { name: 'Revisit this quest', exact: true }).click();
-  await page.getByRole('button', { name: 'Step into the story', exact: true }).click();
+  await page.getByRole('button', { name: 'Replay contract', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue quest', exact: true }).click();
   await completeChallenges();
-  await page.getByRole('button', { name: 'Finish this visit', exact: true }).click();
+  await page.getByRole('button', { name: 'Return to quest board', exact: true }).click();
   await nav('Home');
   assert.equal(parseInt(await page.locator('.wallet').innerText(), 10), 0);
   checks.push('quest revisit preserves the outfit and awards no duplicate coins');
@@ -183,7 +192,7 @@ try {
       await nav(area); await checkFit(`${area} at ${width}px`);
     }
     await nav('Home');
-    for (const section of ['Little shop', 'Wardrobe']) {
+    for (const section of ['Outfitter', 'Equipment']) {
       await page.getByRole('button', { name: section, exact: true }).click();
       await checkFit(`${section} at ${width}px`);
     }

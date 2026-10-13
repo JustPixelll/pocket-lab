@@ -1,32 +1,44 @@
 # Pocket Korean · 한글 in your pocket
 
-A personal Android Korean-learning app for the `pocket-lab` project. Keep a local vocabulary notebook, practice handwriting and spoken recall, translate useful phrases, and follow ten story quests with your own character. Learning earns coins for a small character shop. Korean vocabulary and sound hints never use romanization.
+A personal Android Korean-learning app set at **Greybridge Outpost**, with a stylized fantasy cast, ten story contracts, and travel equipment earned through learning. Keep a local vocabulary notebook, practice handwriting and spoken recall, and translate useful phrases. Korean vocabulary and sound hints never use romanization.
+
+The [repository](https://github.com/JustPixelll/pocket-lab) is public. Your vocabulary, learning progress, and character remain stored on your phone; the app does not publish or sync them to GitHub.
 
 ## Install on your Android phone
 
-1. Open this repository's **Actions** tab while signed into the GitHub account that owns it.
+1. For a prototype APK, open this repository's **Actions** tab while signed into GitHub. Once the owner completes the permanent signing setup below, personal APKs are also available from the public [Releases page](https://github.com/JustPixelll/pocket-lab/releases) without a GitHub login.
 2. Open the latest successful **Build Pocket Korean** run.
 3. Download **Pocket-Korean-Android** from **Artifacts**. Extract the ZIP and open `Pocket-Korean.apk`.
-4. Allow your browser/file manager to install this app if Android asks. Check `BUILD-TYPE.txt`: the first prototype uses a disposable test key. Before replacing a test build, export your notebook; a new build may require uninstalling, reinstalling and importing it. Stable updates are available once protected signing secrets are configured.
+4. Allow your browser/file manager to install this app if Android asks. Check `BUILD-TYPE.txt`: prototype builds use disposable test keys. Export your backup before replacing one. Moving from the installed v0.1.7 prototype to the permanent signing identity requires one final uninstall, install, and import; it cannot be an in-place update. Later personal releases signed with that same permanent key can update the app while keeping its data.
 5. In Pocket Korean, open the top-right settings button and **Prepare both Korean models**. The initial translation and handwriting downloads need internet, approximately 50 MB together. A mobile connection can be used.
 6. If a speaker button reports a missing Korean voice, open **Settings → Korean voice settings**, choose a speech engine that supports Korean, and download its Korean voice data. Return to the app and tap the speaker again; your quest stays where you left it. Translation and handwriting models are separate from spoken voices, so preparing those models does not install a Korean voice.
 7. Grant microphone access when you first choose spoken practice. Listening to Korean audio does not require microphone access.
 
 The minimum Android version is **Android 8.0 (API 26)**. Use an up-to-date Android System WebView. No Play Store listing, app account, server, or AI API key is needed.
 
+## Personal app updates
+
+**Settings → Get app updates** opens the update controls. An explicit check asks GitHub for the latest public release and compares it with the installed version. APK downloads open in the phone's system browser, and Android handles installation after you open the downloaded file. The app checks only when requested; it does not silently install an update. Public release downloads do not require a GitHub login or a token in the app.
+
+**Permanent signing still needs a one-time setup by the repository owner. It has not been completed for this project.** Follow [personal updates](docs/personal-updates.md), using the owner-run [setup helper](scripts/setup-personal-updates.py). The helper needs Python 3, JDK `keytool`, and GitHub CLI authenticated with the owner's permissions. It keeps the permanent key outside the checkout, configures the protected Actions secrets, and registers the public signing-certificate fingerprint. Keep the key backup for future releases; do not share its contents in source files, issues, logs, or chat.
+
+After setup, successful personal builds on `main`, triggered by a push or a manual workflow run, can publish a tagged release with the APK and public checksum/build metadata. Prototype builds and pull requests do not publish personal releases. Until the first personal release exists, continue using the prototype artifacts. Before the one-time transition, export a JSON backup; after installing the personal release, import it and prepare the Korean language models again.
+
 ## The six areas
 
 ### Home
 
-Meet your character in **My corner**, give them a name, and dress them for the next quest. **Little shop** offers hats, outfits and scarves, and body colors; **Wardrobe** keeps everything you own. Starting clothes and several body colors are free. Paid cosmetics cost 20–80 coins and only change appearance. Your equipped character also appears in the quest scenes alongside a recurring cast of townspeople.
+Prepare your wayfarer at **Camp**, name them, and equip them for the next contract. The **Outfitter** offers travel tunics, ranger wraps, coats, cloaks, hats, and body colors; **Equipment** lets you wear the items you own. Starting gear and several body colors are free. Paid cosmetics cost 20–80 coins and only change appearance. The fantasy presentation keeps existing ownership and equipped items intact.
+
+Your equipped character appears in quest scenes with Greybridge's recurring cast: a quartermaster, scout, provisioner, archivist, and rival delver. Open **Contacts → Codex** to read their dossiers and find their contracts.
 
 Earn **20 coins the first time you complete each quest** and **10 coins the first time a word becomes green**. Replaying a quest or bringing a demoted word back to green does not award coins again. Existing completed quests and earlier mastery recorded in your review history receive their rewards once when your notebook is upgraded, including words that were green before a later missed review. There are no currency purchases.
 
 ### Learn
 
-Exactly **10 curated story quests**, each with four short challenges, follow a recurring cast around town. Each quest gives you a small objective, Korean dialogue with English meanings, and a conclusion. It introduces one useful grammar pattern and a few words through sentence-building or meaning-choice puzzles. Speaker buttons in every quest let you hear Korean dialogue, vocabulary, examples, and model answers through the phone's Korean text-to-speech voice.
+Exactly **10 curated story quests**, presented as contracts on the **Quest board**, follow the recurring cast at Greybridge Outpost. Each has four short challenges, a field objective, Korean dialogue with English meanings, and a conclusion. It introduces one useful grammar pattern and a few words through sentence-building or meaning-choice puzzles. Speaker buttons in every quest let you hear Korean dialogue, vocabulary, examples, and model answers through the phone's Korean text-to-speech voice.
 
-Recommendations depend on practiced vocabulary and completed prerequisite quests. Missing words get a focused warm-up. Existing handwritten or translated words can satisfy matching curriculum prerequisites. Completed quests stay available to revisit, and earlier lesson completions keep their progress when upgraded to the story presentation.
+Recommendations depend on practiced vocabulary and completed prerequisite quests. Missing words get a focused warm-up. Existing handwritten or translated words can satisfy matching curriculum prerequisites. Completed quests stay available to revisit. The fantasy revision preserves all ten quest IDs, completed lessons, learning progress, earned rewards, and equipment.
 
 This version is a finite, reviewed lesson bank, not an unlimited text generator. It can choose a suitable next step and revisit material without inventing new grammar. Lessons do not automatically grant vocabulary mastery.
 
@@ -87,13 +99,13 @@ gradle :app:assembleDebug :app:lintDebug
 
 GitHub Actions runs tests, compiles/lints the Android app, and attaches the installable APK. **No signing keys are committed.** By default each runner creates a disposable Android debug key, so builds from different runs may not install over one another. Export/import preserves your notebook when replacing such builds.
 
-For seamless personal updates, the workflow already supports a stable release identity supplied through protected GitHub Actions secrets: `POCKET_KEYSTORE_BASE64`, `POCKET_KEYSTORE_PASSWORD`, `POCKET_KEY_ALIAS`, and `POCKET_KEY_PASSWORD`. These have not been configured by this project. With them present, the workflow writes the key only to its temporary runner directory, builds a signed release, then deletes the temporary key. Do not put keys in source files, issues, logs, or chat.
+The permanent release identity uses protected GitHub Actions secrets: `POCKET_KEYSTORE_BASE64`, `POCKET_KEYSTORE_PASSWORD`, `POCKET_KEY_ALIAS`, and `POCKET_KEY_PASSWORD`, plus the public Actions variable `POCKET_SIGNING_CERT_SHA256`. The owner-run setup helper configures these; setup remains pending. The workflow writes the key only to its temporary runner directory, verifies the built APK against the registered public certificate fingerprint, and deletes the temporary key. Neither the signing key nor its passwords belong in source or release artifacts. See [personal updates](docs/personal-updates.md) for the complete setup and recovery instructions.
 
 The source includes an original Google Translate attribution badge. The automated build refreshes it from Google's official badge archive, selects an original PNG, and logs its name and checksum before packaging. The unmodified attribution image is also included in the build artifact for inspection.
 
-Actual microphone recognition, downloaded models, audio voices, and system installation need a real-device check. Browser service mocks only exercise the interface/bridge contract; they are not evidence that a phone's speech/model services work.
+**Phone feedback:** the user confirmed that the native features work on their actual phone in **v0.1.7**, including spoken input, Korean audio, handwriting, and translation. That confirms the installed prototype's behavior on that phone. The fantasy presentation and public update-check revision require their own build and device verification; see [verification](docs/verification.md) for recorded results. Browser service mocks only exercise the interface/bridge contract.
 
-The separate **Android startup smoke** workflow checks each successful disposable debug APK on an Android emulator, including a real native-service roundtrip. Its evidence artifact identifies the tested APK by SHA-256. Automated assertions establish Activity launch, the loaded DOM, and bridge integration; physical screen captures require visual review. See [verification](docs/verification.md) for the current presentation result. Speech providers, model downloads, and recognition still need a check on the phone where you will use the app.
+The separate **Android startup smoke** workflow checks successful disposable debug APKs on an Android emulator, including a real native-service roundtrip. Its evidence artifact identifies the tested APK by SHA-256. Automated assertions establish Activity launch, the loaded DOM, and bridge integration; physical screen captures require visual review. This debug-only gate does not verify a personal release APK. Other phones and new native changes need separate checks of their speech providers, model downloads, and recognition.
 
 ## Sources and attribution
 

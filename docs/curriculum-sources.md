@@ -1,6 +1,6 @@
 # Korean curriculum: scope, sources, and grading notes
 
-Version 1. Prepared 2026-10-12.
+Version 1. Prepared 2026-10-12; narrative and cast revision 2026-10-13.
 
 ## What is bundled
 
@@ -10,7 +10,7 @@ The lessons cover greetings, introductions, requests in a café, a game inventor
 
 The lesson bank is fixed and available offline. Its selection adapts to active vocabulary progress and completed lessons; it does not invent new grammar or generate unrestricted lesson content. It is a compact starting curriculum and has not undergone an independent native-speaker editorial review.
 
-The story update adds a reusable fictional cast and scene metadata to the same ten lessons. All existing vocabulary IDs, lesson IDs, prerequisites, grammar, and challenges are retained. The scene dialogue reuses Korean already present in the reviewed vocabulary examples, grammar examples, or valid challenge lines. Character names are fictional names written in Korean script; they are not new vocabulary targets.
+The story update adds a reusable fictional cast and scene metadata to the same ten lessons. The revised setting is Greybridge Outpost: dispatch work, equipment records, café orders, archive returns, and preparation for a watchtower inspection. All existing vocabulary, lesson IDs, prerequisites, grammar, challenge answers, and Korean scene lines are retained. English titles, narration, and selected challenge prompts frame the exercises as concrete errands. The scene dialogue reuses Korean already present in the reviewed vocabulary examples, grammar examples, or valid challenge lines. Character names are fictional names written in Korean script; they are not new vocabulary targets.
 
 ## Sources used for checks
 
@@ -59,21 +59,26 @@ Each challenge uses `{ id, type, prompt, ko?, answer, options, explanation, voca
 
 ## Characters and quest scenes
 
-`CHARACTERS` is an exported object keyed by stable NPC IDs: `townkeeper`, `courier`, `cook`, `bookseller`, and `rival`. Each entry has `{ id, name, role, bio, appearance }`. The Korean `name` is not romanized. `role` and `bio` are English display text. Each character appears in two of the existing quests.
+`CHARACTERS` is an exported object keyed by stable NPC IDs: `townkeeper`, `courier`, `cook`, `bookseller`, and `rival`. Each entry has `{ id, name, role, bio, appearance }`. The Korean `name` is not romanized. `role` and `bio` are English display text. The revised display roles are Quartermaster, Scout, Provisioner, Archivist, and Delver respectively; identity and saved references do not depend on these labels. Each character appears in two of the existing quests.
 
 `appearance` uses the player renderer's compatible shape:
 
 ```js
 {
   body: '#F5D4B3',
-  outfit: '#477764',
+  outfit: '#506052',
   outfitStyle: 'scarf', // tee | scarf | hoodie | cape
-  accent: '#E7B563',
-  hat: 'beanie', // none | beanie | cap | wizard | flower-crown
-  hatColor: '#365F4F',
-  hatAccent: '#F4DFB3'
+  accent: '#B78D4D',
+  hat: 'none', // none | beanie | cap | wizard | flower-crown
+  hatColor: '#3B473D',
+  hatAccent: '#D9C59A',
+  archetype: 'quartermaster', // quartermaster | scout | provisioner | archivist | delver
+  expression: 'stern', // stern | focused | skeptical | calm | smirk
+  signatureProp: 'ledger' // ledger | compass | ladle | scroll | sword
 }
 ```
+
+The last three appearance fields are optional renderer metadata and are supplied for all five NPCs. `archetype` selects a role silhouette, `expression` identifies a facial treatment, and `signatureProp` identifies a portrait prop. They are appearance data, not learnable items or unlock requirements. Player appearances can omit these NPC fields.
 
 Each lesson has a `quest` object:
 
@@ -89,8 +94,10 @@ Each lesson has a `quest` object:
 }
 ```
 
-`intro.text`, `outro.text`, and each step's `text` are short English narration. An introduction can use empty `ko` and `en` strings together when no prior line fits without giving away an answer. Render a step's `after` pair only after checking that challenge. It is a model practice line, often spoken by the learner, so do not always attribute it to the NPC. Opening and ending dialogue can be presented as NPC speech. The scenes add neither review evidence nor new prerequisites.
+`intro.text`, `outro.text`, and each step's `text` are short English narration. They can include English fictional speech; that is not a translation of the separate `ko` field. The corresponding `en` remains the translation of `ko`. An introduction can use empty `ko` and `en` strings together when no prior line fits without giving away an answer. Render a step's `after` pair only after checking that challenge. It is a model practice line, often spoken by the learner, so do not always attribute it to the NPC. Opening and ending Korean dialogue can be presented as NPC speech. The scenes add neither review evidence nor new prerequisites.
+
+The English setting does not change the lesson’s Korean meanings: the Brass Kettle has a café, the route messages still discuss school and home, and the delver invites the learner to a game. The story supplies a reason to use those patterns. It does not imply combat grading, a simulated item inventory, generated grammar, or extra quests.
 
 ## Validation
 
-The curriculum tests check the lesson dependency graph, vocabulary reachability, the twelve-card starter set, Korean-only spellings and sound hints, answerability of every puzzle, preservation of spelling versus sound hints, actual progress-dependent recommendations, replay behavior, and lack of state mutation. Scene tests additionally preserve the exact ten legacy lesson IDs, resolve every character reference, validate renderer-compatible appearances, align all four story beats with each lesson's challenges, and restrict scene dialogue to existing reviewed Korean. They cannot replace a linguistic editorial review.
+The curriculum tests check the lesson dependency graph, vocabulary reachability, the twelve-card starter set, Korean-only spellings and sound hints, answerability of every puzzle, preservation of spelling versus sound hints, actual progress-dependent recommendations, replay behavior, and lack of state mutation. Scene tests additionally preserve the exact ten legacy lesson IDs and their forty challenge IDs, resolve every character reference, validate renderer-compatible appearances and optional portrait metadata, check the five distinct archetype/prop pairings, align all four story beats with each lesson's challenges, and restrict scene dialogue to existing reviewed Korean. They cannot replace a linguistic editorial review.

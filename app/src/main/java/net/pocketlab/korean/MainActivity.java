@@ -69,6 +69,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -82,11 +83,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import javax.net.ssl.HttpsURLConnection;
 
 /** Local app shell. The JavaScript bridge is exposed only to packaged, trusted assets. */
 public final class MainActivity extends Activity {
     private static final String APP_HOST = "appassets.androidplatform.net";
     private static final String APP_URL = "https://" + APP_HOST + "/assets/index.html";
+    private static final String UPDATES_URL = "https://github.com/JustPixelll/pocket-lab/releases";
+    private static final String UPDATE_API_URL = "https://api.github.com/repos/JustPixelll/pocket-lab/releases/latest";
+    private static final String UPDATE_DOWNLOAD_URL = UPDATES_URL + "/latest/download/Pocket-Korean.apk";
     private static final int MICROPHONE_REQUEST = 501;
     private static final int EXPORT_REQUEST = 502;
     private static final int IMPORT_REQUEST = 503;
@@ -96,6 +101,7 @@ public final class MainActivity extends Activity {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
+    private final ExecutorService updates = Executors.newSingleThreadExecutor();
     private final Map<String, PendingRequest> pending = new LinkedHashMap<>();
     private final ArrayDeque<String> pageCallbacks = new ArrayDeque<>();
 
@@ -133,6 +139,8 @@ public final class MainActivity extends Activity {
     private String documentRequestId;
     private String documentContent;
     private String documentName;
+    private String updateRequestId;
+    private volatile HttpsURLConnection updateConnection;
 
     @Override
     public void onCreate(Bundle state) {
@@ -384,6 +392,8 @@ public final class MainActivity extends Activity {
                 case "exportBackup": exportBackup(id, payload); break;
                 case "importBackup": importBackup(id); break;
                 case "openSpeechSettings": openSpeechSettings(id, payload); break;
+                case "checkForUpdates": checkForUpdates(id); break;
+                case "openUpdates": openUpdates(id, payload); break;
                 default: fail(id, "UNKNOWN_ACTION", "This app action is not supported.");
             }
         } catch (JSONException | IllegalArgumentException invalid) {
@@ -415,6 +425,8 @@ public final class MainActivity extends Activity {
         return object("platform", "android", "speechAvailable", available || local,
             "onDeviceSpeechAvailable", local, "ttsReady", ttsReady,
             "translationReady", translationReady, "inkReady", inkReady, "version", version,
+            "versionCode", BuildConfig.VERSION_CODE,
+            "updateChannel", BuildConfig.DEBUG ? "prototype" : "personal",
             "koreanVoiceAvailable", koreanVoice, "englishVoiceAvailable", englishVoice);
     }
 
@@ -961,6 +973,114 @@ public final class MainActivity extends Activity {
         documentName = null;
     }
 
+    private void checkForUpdates(String id) {
+        if (updateRequestId != null) {
+            fail(id, "BUSY", "An update check is already in progress.");
+            return;
+        }
+        updateRequestId = id;
+        updates.execute(() -> {
+            HttpsURLConnection connection = null;
+            try {
+                if (destroyed) return;
+                connection = (HttpsURLConnection) new URL(UPDATE_API_URL).openConnection();
+                updateConnection = connection;
+                if (destroyed) return;
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                connection.setInstanceFollowRedirects(false);
+                connection.setUseCaches(false);
+                connection.setRequestProperty("Accept", "application/vnd.github+json");
+                connection.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+                connection.setRequestProperty("User-Agent", "Pocket-Korean/" + BuildConfig.VERSION_NAME);
+                int status = connection.getResponseCode();
+                if (status == 404) {
+                    succeed(id, object("found", false, "available", false,
+                        "currentVersion", BuildConfig.VERSION_NAME, "currentVersionCode", BuildConfig.VERSION_CODE,
+                        "latestVersion", null, "latestVersionCode", null,
+                        "releaseUrl", UPDATES_URL, "downloadUrl", null));
+                    return;
+                }
+                if (status == 403 || status == 429) {
+                    fail(id, "UPDATES_RATE_LIMIT",
+                        "GitHub is limiting update checks. Try again later, or open the releases page in your browser.");
+                    return;
+                }
+                if (status != 200) {
+                    fail(id, "UPDATES_UNAVAILABLE",
+                        "GitHub could not provide update information. Try again later or open the releases page.");
+                    return;
+                }
+                ByteArrayOutputStream body = new ByteArrayOutputStream();
+                try (InputStream input = connection.getInputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        if (body.size() + count > 512 * 1024) {
+                            fail(id, "UPDATES_INVALID_RELEASE", "The update information is too large. Open the releases page instead.");
+                            return;
+                        }
+                        body.write(buffer, 0, count);
+                    }
+                }
+                JSONObject release = new JSONObject(new String(body.toByteArray(), StandardCharsets.UTF_8));
+                String tag = release.getString("tag_name");
+                if (release.optBoolean("draft", true) || release.optBoolean("prerelease", true)
+                    || !tag.matches("^v0\\.1\\.[1-9][0-9]{0,9}$")) {
+                    throw new IllegalArgumentException("Unsupported release");
+                }
+                int latestCode = Integer.parseInt(tag.substring("v0.1.".length()));
+                String releaseUrl = UPDATES_URL + "/tag/" + tag;
+                String downloadUrl = UPDATES_URL + "/download/" + tag + "/Pocket-Korean.apk";
+                if (!releaseUrl.equals(release.getString("html_url")))
+                    throw new IllegalArgumentException("Unexpected release URL");
+                JSONArray assets = release.getJSONArray("assets");
+                boolean hasApk = false;
+                for (int i = 0; i < assets.length(); i++) {
+                    JSONObject asset = assets.getJSONObject(i);
+                    if ("Pocket-Korean.apk".equals(asset.optString("name"))) {
+                        if (hasApk || !"uploaded".equals(asset.optString("state"))
+                            || asset.optLong("size", 0) <= 0
+                            || !downloadUrl.equals(asset.optString("browser_download_url"))) {
+                            throw new IllegalArgumentException("Unexpected APK asset");
+                        }
+                        hasApk = true;
+                    }
+                }
+                if (!hasApk) throw new IllegalArgumentException("Missing APK asset");
+                succeed(id, object("found", true, "available", latestCode > BuildConfig.VERSION_CODE,
+                    "currentVersion", BuildConfig.VERSION_NAME, "currentVersionCode", BuildConfig.VERSION_CODE,
+                    "latestVersion", tag.substring(1), "latestVersionCode", latestCode,
+                    "releaseUrl", releaseUrl, "downloadUrl", downloadUrl));
+            } catch (JSONException | IllegalArgumentException invalid) {
+                fail(id, "UPDATES_INVALID_RELEASE",
+                    "The latest release does not contain a supported Pocket Korean update. Open the releases page to inspect it.");
+            } catch (IOException unavailable) {
+                fail(id, "UPDATES_NETWORK_ERROR", "The update check could not connect. Check your internet connection and try again.");
+            } catch (RuntimeException unavailable) {
+                fail(id, "UPDATES_UNAVAILABLE", "The update check could not finish. Try again or open the releases page.");
+            } finally {
+                if (connection != null) connection.disconnect();
+                if (updateConnection == connection) updateConnection = null;
+            }
+        });
+    }
+
+    private void openUpdates(String id, JSONObject payload) {
+        // Only these two fixed URLs can leave the app. Update checks never
+        // install APKs, and no remote content is loaded into the trusted WebView.
+        String url = "download".equals(payload.optString("mode")) ? UPDATE_DOWNLOAD_URL : UPDATES_URL;
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addCategory(Intent.CATEGORY_BROWSABLE);
+        try {
+            startActivity(intent);
+            succeed(id, object("opened", true));
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            fail(id, "UPDATES_UNAVAILABLE",
+                "Open github.com/JustPixelll/pocket-lab/releases in your browser to download an update.");
+        }
+    }
+
     private void openSpeechSettings(String id, JSONObject payload) {
         String kind = payload.optString("kind", "speech");
         Intent intent;
@@ -1030,6 +1150,11 @@ public final class MainActivity extends Activity {
         }
         if (id.equals(speechRequestId)) clearSpeech();
         if (id.equals(documentRequestId)) clearDocumentRequest();
+        if (id.equals(updateRequestId)) {
+            updateRequestId = null;
+            HttpsURLConnection connection = updateConnection;
+            if (connection != null) connection.disconnect();
+        }
         if (id.equals(preparingRequestId)) preparingRequestId = null;
         sendResult(id, ok, data, code, message);
     }
@@ -1131,6 +1256,7 @@ public final class MainActivity extends Activity {
         if (inkRecognizer != null) inkRecognizer.close();
         destroyed = true;
         files.shutdownNow();
+        updates.shutdownNow();
         main.removeCallbacksAndMessages(null);
         pageCallbacks.clear();
         if (web != null) {

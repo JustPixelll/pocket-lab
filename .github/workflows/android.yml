@@ -17,6 +17,9 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      personal_release: ${{ steps.build.outputs.personal_release }}
+      version_name: ${{ steps.build.outputs.version_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,31 +45,85 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Build and lint the personal APK
+        id: build
         env:
           POCKET_BUILD_NUMBER: ${{ github.run_number }}
-          POCKET_KEYSTORE_BASE64: ${{ secrets.POCKET_KEYSTORE_BASE64 }}
-          POCKET_KEYSTORE_PASSWORD: ${{ secrets.POCKET_KEYSTORE_PASSWORD }}
-          POCKET_KEY_ALIAS: ${{ secrets.POCKET_KEY_ALIAS }}
-          POCKET_KEY_PASSWORD: ${{ secrets.POCKET_KEY_PASSWORD }}
+          TRUSTED_MAIN: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+          POCKET_KEYSTORE_BASE64: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.POCKET_KEYSTORE_BASE64 || '' }}
+          POCKET_KEYSTORE_PASSWORD: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.POCKET_KEYSTORE_PASSWORD || '' }}
+          POCKET_KEY_ALIAS: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.POCKET_KEY_ALIAS || '' }}
+          POCKET_KEY_PASSWORD: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.POCKET_KEY_PASSWORD || '' }}
+          POCKET_SIGNING_CERT_SHA256: ${{ vars.POCKET_SIGNING_CERT_SHA256 }}
         run: |
+          set -euo pipefail
           mkdir -p deliverables
-          if [ -n "$POCKET_KEYSTORE_BASE64" ]; then
+          configured=0
+          for name in POCKET_KEYSTORE_BASE64 POCKET_KEYSTORE_PASSWORD POCKET_KEY_ALIAS POCKET_KEY_PASSWORD; do
+            if [ -n "${!name}" ]; then configured=$((configured + 1)); fi
+          done
+          if [ "$TRUSTED_MAIN" = true ]; then
+            if [ "$configured" -ne 0 ] && [ "$configured" -ne 4 ]; then
+              echo '::error::Signing is partially configured. Set all four POCKET signing secrets using the owner setup helper; no disposable fallback will be built.'
+              exit 1
+            fi
+            if [ -n "$POCKET_SIGNING_CERT_SHA256" ] && [ "$configured" -ne 4 ]; then
+              echo '::error::A personal signing identity is registered, but its four secrets are incomplete. Resume setup with the existing owner backup.'
+              exit 1
+            fi
+            if [ "$configured" -eq 4 ] && ! [[ "$POCKET_SIGNING_CERT_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
+              echo '::error::Set POCKET_SIGNING_CERT_SHA256 to the public certificate SHA-256 from the owner setup helper before building a personal release.'
+              exit 1
+            fi
+          fi
+          if [ "$TRUSTED_MAIN" = true ] && [ "$configured" -eq 4 ]; then
+            umask 077
             export POCKET_KEYSTORE_PATH="$RUNNER_TEMP/pocket-korean-signing.jks"
             trap 'rm -f "$POCKET_KEYSTORE_PATH"' EXIT
             printf '%s' "$POCKET_KEYSTORE_BASE64" | base64 --decode > "$POCKET_KEYSTORE_PATH"
-            chmod 600 "$POCKET_KEYSTORE_PATH"
             gradle --no-daemon :app:assembleRelease :app:lintRelease
             cp app/build/outputs/apk/release/app-release.apk deliverables/Pocket-Korean.apk
             printf 'Stable signing from protected GitHub Actions secrets.\n' > deliverables/BUILD-TYPE.txt
+            printf 'personal_release=true\n' >> "$GITHUB_OUTPUT"
           else
             gradle --no-daemon :app:assembleDebug :app:lintDebug
             cp app/build/outputs/apk/debug/app-debug.apk deliverables/Pocket-Korean.apk
             printf 'Disposable debug signing. Export a backup before replacing this build; future builds may require reinstalling.\n' > deliverables/BUILD-TYPE.txt
+            printf 'personal_release=false\n' >> "$GITHUB_OUTPUT"
           fi
-      - name: Name the installable app
+          printf 'version_name=0.1.%s\n' "$POCKET_BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Verify and describe the installable app
+        env:
+          PERSONAL_RELEASE: ${{ steps.build.outputs.personal_release }}
+          EXPECTED_SIGNING_CERT: ${{ vars.POCKET_SIGNING_CERT_SHA256 }}
         run: |
-          mkdir -p deliverables
-          sha256sum deliverables/Pocket-Korean.apk > deliverables/SHA256SUMS.txt
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          apk = Path('deliverables/Pocket-Korean.apk')
+          build_tools = Path(os.environ.get('ANDROID_HOME') or os.environ['ANDROID_SDK_ROOT']) / 'build-tools/35.0.0'
+          signature = subprocess.run([str(build_tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], check=True, capture_output=True, text=True)
+          fingerprints = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$', signature.stdout, re.MULTILINE)
+          if len(fingerprints) != 1:
+              raise SystemExit('The APK must have exactly one verifiable signing certificate.')
+          fingerprint = fingerprints[0].lower()
+          personal = os.environ['PERSONAL_RELEASE'] == 'true'
+          if personal and fingerprint != os.environ['EXPECTED_SIGNING_CERT'].lower():
+              raise SystemExit('The APK signing certificate differs from the registered personal identity. Nothing will be released.')
+          badging = subprocess.run([str(build_tools / 'aapt'), 'dump', 'badging', str(apk)], check=True, capture_output=True, text=True).stdout
+          package = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']*)'", badging, re.MULTILINE)
+          version_code = int(os.environ['GITHUB_RUN_NUMBER'])
+          version_name = f'0.1.{version_code}'
+          if not package or package.groups() != ('net.pocketlab.korean', str(version_code), version_name):
+              raise SystemExit('The packaged app identity/version differs from this build.')
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          metadata = {'packageName': package[1], 'versionName': version_name, 'versionCode': version_code,
+                      'updateChannel': 'personal' if personal else 'prototype', 'apkSHA256': digest,
+                      'signingCertificateSHA256': fingerprint, 'sourceCommit': os.environ['GITHUB_SHA'],
+                      'buildRun': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"}
+          Path('deliverables/SHA256SUMS.txt').write_text(f'{digest}  Pocket-Korean.apk\n', encoding='utf-8')
+          Path('deliverables/BUILD-METADATA.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+          print(f'Verified Pocket Korean {version_name}; channel={metadata["updateChannel"]}; certificate SHA-256={fingerprint}')
+          PY
           cp app/src/main/assets/google-translate-attribution.png deliverables/google-translate-attribution.png
       - name: Downloadable Android app
         uses: actions/upload-artifact@v4
@@ -82,3 +139,62 @@ jobs:
           name: Android-lint-report
           path: app/build/reports/lint-results-*.html
           if-no-files-found: ignore
+
+  publish_personal_release:
+    needs: android
+    if: needs.android.outputs.personal_release == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Pocket-Korean-Android
+          path: release-files
+      - name: Publish the verified personal APK
+        working-directory: release-files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_NAME: ${{ needs.android.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          sha256sum --check SHA256SUMS.txt
+          tag="v$VERSION_NAME"
+          # A retry of an older build must never move the phone's latest link backwards.
+          # Failed API calls stop this job before creating or publishing a release.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+            > "$RUNNER_TEMP/pocket-published-tags.txt"
+          python3 - "$RUNNER_TEMP/pocket-published-tags.txt" "$VERSION_NAME" <<'PY'
+          import re, sys
+          from pathlib import Path
+          requested = re.fullmatch(r'0\.1\.([1-9][0-9]*)', sys.argv[2])
+          if not requested:
+              raise SystemExit('Unsupported release version. Nothing will be published.')
+          candidate = int(requested[1])
+          for tag in Path(sys.argv[1]).read_text(encoding='utf-8').splitlines():
+              published = re.fullmatch(r'v0\.1\.([1-9][0-9]*)', tag)
+              if not published:
+                  raise SystemExit('An unsupported published version exists. Review versioning before releasing.')
+              if int(published[1]) >= candidate:
+                  raise SystemExit('This build is not newer than every published version. The latest release will be kept.')
+          PY
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Release $tag already exists. It will not be overwritten. Inspect any unfinished draft in Releases before retrying."
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/pocket-release-notes.md" <<'NOTES'
+          Download **Pocket-Korean.apk**, then open it on your Android phone and approve the installation.
+
+          Personal-channel updates use the same signing identity and preserve the installed notebook. Moving from a disposable prototype, including v0.1.7 or v0.1.8, requires one final migration: export a JSON backup first, replace the old installation, then import the backup and prepare the language models again.
+
+          The attached metadata records the exact app version, source commit, APK checksum, and public signing-certificate fingerprint. The signing key is never attached. Releases are public and can be downloaded without a GitHub login.
+          NOTES
+          gh release create "$tag" Pocket-Korean.apk SHA256SUMS.txt BUILD-TYPE.txt BUILD-METADATA.json \
+            --target "$GITHUB_SHA" --title "Pocket Korean $VERSION_NAME" \
+            --notes-file "$RUNNER_TEMP/pocket-release-notes.md" --draft
+          gh release edit "$tag" --draft=false --latest
+          printf 'Personal update published: https://github.com/%s/releases/tag/%s\n' "$GITHUB_REPOSITORY" "$tag" >> "$GITHUB_STEP_SUMMARY"

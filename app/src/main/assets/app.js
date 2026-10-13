@@ -30,6 +30,7 @@ let translation = { source: 'en', target: 'ko', input: '', translatedInput: '', 
 let writing = { group: 'syllables', target: '가', showGuide: true, strokes: [], activeStroke: null, feedback: '', candidates: [], lastWidth: 0, lastHeight: 0, revision: 0 };
 let lessonFeedback = null;
 let speechToken = 0;
+let updateCheckToken = 0;
 const jamo = {
   syllables: ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하', '한', '글', '말', '물', '밥', '집', '잠'],
   consonants: ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'ㄲ', 'ㄸ', 'ㅃ', 'ㅆ', 'ㅉ'],
@@ -81,6 +82,7 @@ function collectCurated(id) {
 function render() {
   updateHeader(); updateNav();
   const main = $('#main');
+  main.dataset.route = route;
   if (route === 'home') renderHome(main);
   else if (route === 'learn') renderLearn(main);
   else if (route === 'words') renderWords(main);
@@ -107,39 +109,39 @@ function renderHome(main) {
   const completed = store.getLessonProgress();
   const next = lessonsWithReadiness().find(lesson => !lesson.completed && lesson.ready)
     || lessonsWithReadiness().find(lesson => !lesson.completed) || LESSONS[0];
-  const tabs = `<div class="home-tabs" aria-label="Home areas">${[['room', 'My corner', 'home'], ['shop', 'Little shop', 'shop'], ['wardrobe', 'Wardrobe', 'hat']].map(([id, name, symbol]) => `<button data-action="home-section" data-section="${id}" class="${homeSection === id ? 'active' : ''}" aria-pressed="${homeSection === id}">${icon(symbol)}${name}</button>`).join('')}</div>`;
-  const heading = `<div class="home-heading"><div><span class="eyebrow">Your corner of town</span><h1>${homeSection === 'shop' ? 'A little something new.' : homeSection === 'wardrobe' ? 'Made for your journey.' : 'Home, little adventurer.'}</h1></div>${coinLabel(profile.coins, 'wallet')}</div>${tabs}`;
+  const tabs = `<div class="home-tabs" aria-label="Home areas">${[['room', 'Camp', 'home'], ['shop', 'Outfitter', 'shop'], ['wardrobe', 'Equipment', 'hat']].map(([id, name, symbol]) => `<button data-action="home-section" data-section="${id}" class="${homeSection === id ? 'active' : ''}" aria-pressed="${homeSection === id}">${icon(symbol)}${name}</button>`).join('')}</div>`;
+  const heading = `<div class="home-heading"><div><span class="eyebrow">Greybridge outpost</span><h1>${homeSection === 'shop' ? 'The outfitter.' : homeSection === 'wardrobe' ? 'Your equipment.' : 'Camp.'}</h1></div>${coinLabel(profile.coins, 'wallet')}</div>${tabs}`;
   if (homeSection !== 'room') {
     const owned = new Set(profile.ownedItems);
     const items = COSMETICS.filter(item => item.slot === shopSlot && (homeSection === 'shop' || owned.has(item.id) || item.price === 0));
-    main.innerHTML = `${heading}<div class="shop-companion"><div class="shop-avatar">${characterSvg(profile.equipment, { label: profile.characterName })}</div><div><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>Your outfit comes along on every quest.</p>${button('rename-character', 'Change name', 'outline small', 'write')}</div></div>
+    main.innerHTML = `${heading}<div class="shop-companion"><div class="shop-avatar">${characterSvg(profile.equipment, { label: profile.characterName })}</div><div><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>Gear up before taking your next contract.</p>${button('rename-character', 'Change name', 'outline small', 'write')}</div></div>
       <div class="segmented" aria-label="Clothing categories">${[['hat', 'Hats'], ['outfit', 'Outfits'], ['body', 'Colors']].map(([id, title]) => `<button data-action="shop-slot" data-slot="${id}" class="${shopSlot === id ? 'active' : ''}">${title}</button>`).join('')}</div>
       <div class="shop-grid">${items.map(item => {
         const equipped = profile.equipment[item.slot] === item.id;
         const isOwned = owned.has(item.id) || item.price === 0;
         const action = isOwned ? 'equip-item' : 'buy-item';
-        const title = equipped ? 'Wearing' : isOwned ? 'Wear it' : `Buy · ${item.price} coins`;
+        const title = equipped ? 'Equipped' : isOwned ? 'Equip' : `Buy · ${item.price} coins`;
         const preview = { ...profile.equipment, [item.slot]: item.id };
-        return `<article class="shop-card ${equipped ? 'equipped' : ''}" data-item="${escape(item.id)}"><div class="shop-item-art">${characterSvg(preview, { label: `${profile.characterName} wearing ${item.name}` })}</div><h3>${escape(item.name)}</h3><p class="item-price">${isOwned ? (item.price === 0 ? 'Yours from the start' : 'In your wardrobe') : coinLabel(item.price)}</p>${button(action, title, `${equipped ? 'secondary' : isOwned ? 'outline' : ''} full small`, equipped ? 'check' : '', `data-id="${escape(item.id)}" ${equipped || (!isOwned && profile.coins < item.price) ? 'disabled' : ''}`)}${!isOwned && profile.coins < item.price ? `<p class="item-shortfall">${item.price - profile.coins} more coins to go</p>` : ''}</article>`;
+        return `<article class="shop-card ${equipped ? 'equipped' : ''}" data-item="${escape(item.id)}"><div class="shop-item-art">${characterSvg(preview, { label: `${profile.characterName} wearing ${item.name}` })}</div><h3>${escape(item.name)}</h3><p class="item-price">${isOwned ? (item.price === 0 ? 'Starting equipment' : 'Owned') : coinLabel(item.price)}</p>${button(action, title, `${equipped ? 'secondary' : isOwned ? 'outline' : ''} full small`, equipped ? 'check' : '', `data-id="${escape(item.id)}" ${equipped || (!isOwned && profile.coins < item.price) ? 'disabled' : ''}`)}${!isOwned && profile.coins < item.price ? `<p class="item-shortfall">${item.price - profile.coins} more coins to go</p>` : ''}</article>`;
       }).join('')}</div>
       <p class="soft-note space-top">Earn 20 coins the first time you finish a quest, and 10 when a word first turns green. Everything here is bought with learning coins.</p>${profile.coinDebt ? `<p class="soft-note space-top">Your merged backups included purchases from both copies. The next ${profile.coinDebt} earned coins will account for those items; your wardrobe is kept.</p>` : ''}`;
     return;
   }
-  main.innerHTML = `${heading}<div class="home-layout"><section class="character-home card"><div class="character-home-top"><span class="eyebrow">Your adventurer</span><button class="icon-button" data-action="rename-character" aria-label="Change character name">${icon('write')}</button></div><div class="home-stage">${sceneDecor('Garden')}<div class="home-player">${characterSvg(profile.equipment, { label: profile.characterName })}</div><span class="stage-sprout one"></span><span class="stage-sprout two"></span></div><div class="character-caption"><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>One small adventure at a time.</p></div>${button('home-section', 'Open wardrobe', 'secondary full', 'hat', 'data-section="wardrobe"')}</section>
-    <div class="home-notes"><div class="card next-quest"><span class="eyebrow">${completed[next.id] ? 'Worth another visit' : 'Your next quest'}</span><h2>${escape(next.title)}</h2><p>${escape(next.quest?.objective || next.subtitle)}</p><div class="next-quest-foot"><span class="tag">${escape(next.quest?.location || 'Around town')}</span>${!completed[next.id] ? coinLabel(20) : '<span class="check-pill">Completed</span>'}</div>${button('open-lesson', completed[next.id] ? 'Visit again' : 'Take a little journey', 'full space-top', 'arrow', `data-id="${escape(next.id)}"`)}</div>
-    <div class="daily-goal"><div><h3>A little Korean, every day.</h3><p>${Math.min(daily, dailyGoal)} of ${dailyGoal} reviews today</p>${button('start-practice', 'Practice words', 'outline small space-top', 'mic')}</div><div class="goal-ring" style="--progress:${Math.min(100, 100 * daily / dailyGoal)}%"><span>${daily}/${dailyGoal}</span></div></div></div></div>
+  main.innerHTML = `${heading}<div class="home-layout"><section class="character-home card"><div class="character-home-top"><span class="eyebrow">Wayfarer</span><button class="icon-button" data-action="rename-character" aria-label="Change character name">${icon('write')}</button></div><div class="home-stage">${sceneDecor('Camp')}<div class="home-player">${characterSvg(profile.equipment, { label: profile.characterName })}</div></div><div class="character-caption"><h2 lang="${nameLanguage(profile.characterName)}">${escape(profile.characterName)}</h2><p>${escape(COSMETICS.find(item => item.id === profile.equipment.outfit)?.name || 'Travel tunic')} · ${escape(COSMETICS.find(item => item.id === profile.equipment.hat)?.name || 'No hat')}</p></div>${button('home-section', 'Manage equipment', 'secondary full', 'hat', 'data-section="wardrobe"')}</section>
+    <div class="home-notes"><div class="card next-quest"><span class="eyebrow">${completed[next.id] ? 'From the journal' : 'Next contract'}</span><h2>${escape(next.title)}</h2><p>${escape(next.quest?.objective || next.subtitle)}</p><div class="next-quest-foot"><span class="tag">${escape(next.quest?.location || 'Around town')}</span>${!completed[next.id] ? coinLabel(20) : '<span class="check-pill">Completed</span>'}</div>${button('open-lesson', completed[next.id] ? 'Replay contract' : 'View contract', 'full space-top', 'arrow', `data-id="${escape(next.id)}"`)}</div>
+    <div class="daily-goal"><div><h3>Recall practice</h3><p>${Math.min(daily, dailyGoal)} of ${dailyGoal} reviews today</p>${button('start-practice', 'Practice words', 'outline small space-top', 'mic')}</div><div class="goal-ring" style="--progress:${Math.min(100, 100 * daily / dailyGoal)}%"><span>${daily}/${dailyGoal}</span></div></div></div></div>
     <div class="stats-row"><div class="stat"><b>${Object.keys(completed).filter(id => LESSONS.some(lesson => lesson.id === id)).length}<small> / 10</small></b><span>Quests completed</span></div><div class="stat"><b>${stats.total}</b><span>Words collected</span></div><div class="stat mastered"><b>${stats.mastered}</b><span>Words mastered</span></div></div>
-    <div class="section-head"><h2>Familiar faces</h2><button class="text-button" data-action="town-notebook">Town notebook ${icon('arrow')}</button></div><div class="town-faces">${Object.values(CHARACTERS).map(person => `<button class="town-face" data-action="meet-character" data-id="${escape(person.id)}"><span>${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</span><strong lang="ko">${escape(person.name)}</strong><small>${escape(person.role)}</small></button>`).join('')}</div>
+    <div class="section-head"><h2>Contacts</h2><button class="text-button" data-action="town-notebook">Codex ${icon('arrow')}</button></div><div class="town-faces">${Object.values(CHARACTERS).map(person => `<button class="town-face" data-action="meet-character" data-id="${escape(person.id)}"><span>${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</span><strong lang="ko">${escape(person.name)}</strong><small>${escape(person.role)}</small></button>`).join('')}</div>
     <p class="footer-note">${icon('coin')} First quest completion +20 · first green word +10</p>`;
 }
 
 function renameCharacter() {
   const profile = store.getProfile();
-  showModal('What should we call you?', `<form id="character-form"><label class="field"><span>Your character’s name</span><input class="input" id="character-name" value="${escape(profile.characterName)}" maxlength="24" required autocomplete="off"></label><p class="soft-note">A name for your little companion. You can change it any time.</p><button class="button full space-top" type="submit">${icon('check')}Save name</button><div id="character-form-error" role="alert"></div></form>`);
+  showModal('Character name', `<form id="character-form"><label class="field"><span>Your character’s name</span><input class="input" id="character-name" value="${escape(profile.characterName)}" maxlength="24" required autocomplete="off"></label><p class="soft-note">The name shown in camp and quest encounters. Change it whenever you want.</p><button class="button full space-top" type="submit">${icon('check')}Save name</button><div id="character-form-error" role="alert"></div></form>`);
 }
 function townNotebook(id = '') {
   const people = id && CHARACTERS[id] ? [CHARACTERS[id]] : Object.values(CHARACTERS);
-  showModal(id ? 'A familiar face' : 'Your town notebook', `<p class="muted tiny">People to meet, and places to return to.</p><div class="town-notebook">${people.map(person => `<article class="person-card"><div class="person-portrait">${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</div><div><h3>${personName(person)}</h3><span class="eyebrow">${escape(person.role)}</span><p>${escape(person.bio || '')}</p><div class="person-quests">${LESSONS.filter(lesson => lesson.quest?.npcId === person.id).map(lesson => button('open-lesson', escape(lesson.title), 'outline small', 'arrow', `data-id="${escape(lesson.id)}"`)).join('')}</div></div></article>`).join('')}</div>`);
+  showModal(id ? 'Contact dossier' : 'Greybridge codex', `<p class="muted tiny">The people who keep Greybridge running. Some will have more work for you.</p><div class="town-notebook">${people.map(person => `<article class="person-card"><div class="person-portrait">${characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name })}</div><div><h3>${personName(person)}</h3><span class="eyebrow">${escape(person.role)}</span><p>${escape(person.bio || '')}</p><div class="person-quests">${LESSONS.filter(lesson => lesson.quest?.npcId === person.id).map(lesson => button('open-lesson', escape(lesson.title), 'outline small', 'arrow', `data-id="${escape(lesson.id)}"`)).join('')}</div></div></article>`).join('')}</div>`);
 }
 
 function questScene(lesson, { small = false, proud = false } = {}) {
@@ -151,7 +153,7 @@ function questScene(lesson, { small = false, proud = false } = {}) {
 function questDialogue(lesson, dialogue) {
   if (!dialogue || (!dialogue.text && !dialogue.ko)) return '';
   const person = CHARACTERS[lesson.quest?.npcId];
-  return `<div class="quest-dialogue"><span class="dialogue-speaker">${personName(person)}<span>${escape(person?.role || '')}</span></span>${dialogue.text ? `<p>${escape(dialogue.text)}</p>` : ''}${dialogue.ko ? `<div class="spoken-line"><p class="ko" lang="ko">${escape(dialogue.ko)}</p>${audioButton(dialogue.ko, 'Hear the dialogue')}</div><p class="dialogue-translation">${escape(dialogue.en)}</p>` : ''}</div>`;
+  return `<div class="quest-dialogue"><div class="dialogue-top"><div class="dialogue-portrait">${person ? characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name }) : ''}</div><span class="dialogue-speaker">${personName(person)}<span>${escape(person?.role || '')}</span></span></div>${dialogue.text ? `<p>${escape(dialogue.text)}</p>` : ''}${dialogue.ko ? `<div class="spoken-line"><p class="ko" lang="ko">${escape(dialogue.ko)}</p>${audioButton(dialogue.ko, 'Hear the dialogue')}</div><p class="dialogue-translation">${escape(dialogue.en)}</p>` : ''}</div>`;
 }
 
 function renderLearn(main) {
@@ -159,18 +161,18 @@ function renderLearn(main) {
   const lessons = lessonsWithReadiness();
   const done = lessons.filter(lesson => lesson.completed).length;
   const next = lessons.find(lesson => lesson.ready && !lesson.completed) || lessons.find(lesson => !lesson.completed) || lessons[0];
-  main.innerHTML = `${intro('Ten little quests', 'A town full of possibilities.', 'Meet someone, learn a useful phrase, and carry it into your next small adventure.')}
+  main.innerHTML = `${intro('Greybridge · Chapter I', 'Quest board.', 'Supplies to recover. Routes to scout. People worth knowing. Ten contracts at the edge of the road.')}
     ${questScene(next, { small: true })}
-    <div class="quest-board-heading"><div><h2>Your quest journal</h2><p>${done} of ${LESSONS.length} completed · take them at your own pace</p></div>${coinLabel(store.getProfile().coins)}</div>
+    <div class="quest-board-heading"><div><h2>Contracts</h2><p>${done} of ${LESSONS.length} completed · Greybridge outpost</p></div>${coinLabel(store.getProfile().coins)}</div>
     <div class="lesson-list quest-list">${lessons.map((lesson, i) => {
       const person = CHARACTERS[lesson.quest?.npcId];
-      return `<button class="lesson-card quest-card ${lesson.completed ? 'quest-completed' : ''}" data-action="open-lesson" data-id="${escape(lesson.id)}"><span class="quest-number">${lesson.completed ? icon('check') : String(LESSONS.findIndex(item => item.id === lesson.id) + 1).padStart(2, '0')}</span><div class="lesson-content"><span class="quest-place">${escape(lesson.quest?.location || 'Around town')}</span><h3>${escape(lesson.title)}</h3><p>${escape(lesson.quest?.objective || lesson.subtitle)}</p><div class="lesson-meta">${lesson.completed ? '<span class="check-pill">Revisit anytime</span>' : lesson.ready ? '<span class="tag">Ready for you</span>' : `<span class="tag neutral">${(lesson.missingLessonIds || []).length ? 'An earlier quest first' : `${(lesson.missingVocabIds || []).length} words to warm up`}</span>`}${!lesson.completed ? coinLabel(20) : ''}</div>${person ? `<span class="quest-host">With ${personName(person)} · ${escape(person.role)}</span>` : ''}</div>${icon('chevron')}</button>`;
-    }).join('')}</div><p class="soft-note space-top">Every quest has four short challenges. First completions earn 20 coins; revisits are always welcome. The words you learn join your notebook for later practice.</p>`;
+      return `<button class="lesson-card quest-card ${lesson.completed ? 'quest-completed' : ''}" data-action="open-lesson" data-id="${escape(lesson.id)}"><span class="quest-contact-art">${person ? characterSvg(DEFAULT_EQUIPMENT, { appearance: person.appearance, label: person.name }) : ''}<span class="quest-number">${lesson.completed ? icon('check') : String(LESSONS.findIndex(item => item.id === lesson.id) + 1).padStart(2, '0')}</span></span><div class="lesson-content"><span class="quest-place">${escape(lesson.quest?.location || 'Around town')}</span><h3>${escape(lesson.title)}</h3><p>${escape(lesson.quest?.objective || lesson.subtitle)}</p><div class="lesson-meta">${lesson.completed ? '<span class="check-pill">Completed · replay</span>' : lesson.ready ? '<span class="tag">Available</span>' : `<span class="tag neutral">${(lesson.missingLessonIds || []).length ? 'Prerequisite quest' : `${(lesson.missingVocabIds || []).length} words to practice`}</span>`}${!lesson.completed ? coinLabel(20) : ''}</div>${person ? `<span class="quest-host">${personName(person)} · ${escape(person.role)}</span>` : ''}</div>${icon('chevron')}</button>`;
+    }).join('')}</div><p class="soft-note space-top">Four challenges per contract. First completions pay 20 coins. Collected vocabulary stays in your notebook for recall practice.</p>`;
 }
 
 function renderWords(main) {
   const stats = store.getStats();
-  main.innerHTML = `${intro('Collected, practiced, remembered', 'Your word garden.', 'Every word starts somewhere. Tap one to hear it, see an example, and follow its progress.')}
+  main.innerHTML = `${intro('Your field notes', 'Vocabulary.', 'Listen to a word, check its meaning, and track how well you recall it.')}
     <div class="search-wrap">${icon('search')}<input id="word-search" class="input" type="search" placeholder="Find a word or meaning" aria-label="Search vocabulary" value="${escape(wordQuery)}"></div>
     <div class="filter-row">${[['all', 'All', stats.total], ['new', 'New', stats.new], ['learning', 'Learning', stats.learning], ['mastered', 'Mastered', stats.mastered]].map(([id, title, count]) => `<button class="filter ${wordFilter === id ? 'active' : ''}" data-action="word-filter" data-filter="${id}">${id === 'all' ? '' : `<i class="dot ${id}"></i>`}${title} · ${count}</button>`).join('')}</div>
     <div class="button-row equal space-bottom">${button('new-word', 'Add a word', 'outline small', 'plus')}${button('browse-vocab', 'Explore starter words', 'outline small', 'learn')}</div>
@@ -248,7 +250,7 @@ function nextQuestion() {
 function renderSpeak(main) {
   if (!practice) newPractice();
   if (practice.finished) {
-    main.innerHTML = `${intro('A little progress, saved', 'You showed up.', 'That’s how words become familiar. Your next review is already planned.')}<div class="card" style="text-align:center"><div class="success-seal">${icon('leaf')}</div><div class="summary-large">${practice.correct}<span style="font-size:24px;color:var(--muted)"> / ${practice.count}</span></div><p class="muted space-top">recalled without revealing the answer</p>${button('restart-practice', 'Another little round', 'full space-top', 'arrow')}${button('go-words', 'See my vocabulary', 'outline full space-top', 'words')}</div><p class="soft-note space-top">Fast repeats are useful practice. Lasting mastery comes from successful reviews on different days.</p>`;
+    main.innerHTML = `${intro('Reviews saved', 'Practice complete.', 'Your next reviews are scheduled. Due words return for another round.')}<div class="card" style="text-align:center"><div class="success-seal">${icon('leaf')}</div><div class="summary-large">${practice.correct}<span style="font-size:24px;color:var(--muted)"> / ${practice.count}</span></div><p class="muted space-top">recalled without revealing the answer</p>${button('restart-practice', 'Practice again', 'full space-top', 'arrow')}${button('go-words', 'See my vocabulary', 'outline full space-top', 'words')}</div><p class="soft-note space-top">Fast repeats are useful practice. Lasting mastery comes from successful reviews on different days.</p>`;
     return;
   }
   const item = practice.current;
@@ -268,7 +270,7 @@ function renderSpeak(main) {
         ${practice.alternatives.length > 1 ? `<div class="choice-alternatives">${practice.alternatives.slice(0, 3).map(a => `<button type="button" data-action="speech-alternative" data-answer="${escape(a)}">${escape(a)}</button>`).join('')}</div>` : ''}
         <button type="submit" class="button full" ${practice.listening ? 'disabled' : ''}>${icon('check')}Check my answer</button></form>
         ${practice.serviceError ? `<div class="inline-error" role="alert">${escape(practice.serviceError)}${isAndroid ? `<div class="button-row space-top">${button('speech-settings', 'Speech language settings', 'outline small', 'settings')}${button('input-mode', 'Use typed practice', 'outline small', 'keyboard', 'data-mode="typed"')}</div>` : ''}</div>` : ''}
-        <button class="text-button space-top" data-action="reveal-answer">I need a little help · reveal answer</button>` : `<div class="feedback ${practice.feedback?.correct ? '' : 'wrong'}" role="status"><strong>${practice.feedback?.correct ? 'That’s the word.' : practice.assisted ? 'A word to revisit.' : 'Let’s keep this one growing.'}</strong><p class="answer ko" lang="ko">${escape(card.ko)}</p><p>${escape(card.en)}</p><p class="tiny">${escape(practice.feedback?.message || '')}</p>${button('play-answer', 'Hear the Korean', 'outline small', 'volume')}</div>${button('next-question', practice.count >= practice.target ? 'See this round' : 'Next word', 'full', 'arrow')}`}
+        <button class="text-button space-top" data-action="reveal-answer">Reveal answer</button>` : `<div class="feedback ${practice.feedback?.correct ? '' : 'wrong'}" role="status"><strong>${practice.feedback?.correct ? 'That’s the word.' : practice.assisted ? 'A word to revisit.' : 'Review this word again.'}</strong><p class="answer ko" lang="ko">${escape(card.ko)}</p><p>${escape(card.en)}</p><p class="tiny">${escape(practice.feedback?.message || '')}</p>${button('play-answer', 'Hear the Korean', 'outline small', 'volume')}</div>${button('next-question', practice.count >= practice.target ? 'See this round' : 'Next word', 'full', 'arrow')}`}
     </div><p class="soft-note">${icon('info')}Speech checks which word you recalled. Check the transcript before submitting if your phone heard you incorrectly. ${isAndroid ? 'Your phone’s speech service may use the internet.' : 'Microphone practice is available in the Android app; typed practice works here.'}</p>`;
 }
 function submitAnswer(event) {
@@ -468,10 +470,10 @@ function openLesson(id) {
   const newWords = (lesson.teachVocab || []).map(wordId => sourceById.get(wordId)).filter(Boolean);
   const previous = (lesson.missingLessonIds || []).map(lessonId => LESSONS.find(l => l.id === lessonId)).filter(Boolean);
   showModal(lesson.title, `${questScene(lesson, { small: true })}<p class="quest-objective">${escape(lesson.quest?.objective || lesson.subtitle)}</p><div class="quest-reward-note">${lesson.completed ? '<span class="check-pill">First-completion reward already collected</span>' : `${coinLabel(20)}<span>First-completion reward</span>`}</div><div class="divider"></div><h3 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h3><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>
-    ${previous.length ? `<div class="soft-note space-top"><strong>One earlier adventure first</strong><p class="space-top">${previous.map(l => escape(l.title)).join(', ')}</p>${button('open-lesson', 'Open the earlier adventure', 'outline small space-top', 'arrow', `data-id="${escape(previous[0].id)}"`)}</div>` : ''}
-    ${missing.length ? `<div class="soft-note space-top"><strong>A few words to warm up</strong><p class="space-top">${missing.map(w => `<span lang="ko">${escape(w.ko)}</span>`).join(' · ')}</p><p class="space-top">Practice these first so the sentences have something familiar to build on.</p>${button('prepare-lesson-words', 'Collect & practice these words', 'secondary small space-top', 'mic', `data-id="${escape(id)}"`)}</div>` : ''}
+    ${previous.length ? `<div class="soft-note space-top"><strong>Required contract</strong><p class="space-top">${previous.map(l => escape(l.title)).join(', ')}</p>${button('open-lesson', 'Open required contract', 'outline small space-top', 'arrow', `data-id="${escape(previous[0].id)}"`)}</div>` : ''}
+    ${missing.length ? `<div class="soft-note space-top"><strong>A few words to practice</strong><p class="space-top">${missing.map(w => `<span lang="ko">${escape(w.ko)}</span>`).join(' · ')}</p><p class="space-top">Practice these first so the sentences have something familiar to build on.</p>${button('prepare-lesson-words', 'Collect & practice these words', 'secondary small space-top', 'mic', `data-id="${escape(id)}"`)}</div>` : ''}
     <div class="section-head"><h3>Words for this quest</h3></div>${newWords.map(w => `<div class="trail-card quest-word"><div><h3 lang="ko">${escape(w.ko)}</h3><p class="muted tiny">${escape(w.en)}</p></div>${audioButton(w.ko, `Hear ${w.ko}`)}</div>`).join('') || '<p class="muted tiny">A new way to use words you already have.</p>'}
-    ${button('start-lesson', lesson.completed ? 'Revisit this quest' : 'Begin quest', 'full space-top', 'arrow', `data-id="${escape(id)}" ${!lesson.ready && !lesson.completed ? 'disabled' : ''}`)}<p class="pronunciation-note">Quest puzzles build understanding. Your vocabulary becomes mastered through separate recall reviews.</p>`);
+    ${button('start-lesson', lesson.completed ? 'Replay contract' : 'Accept contract', 'full space-top', 'arrow', `data-id="${escape(id)}" ${!lesson.ready && !lesson.completed ? 'disabled' : ''}`)}<p class="pronunciation-note">Quest puzzles build understanding. Your vocabulary becomes mastered through separate recall reviews.</p>`);
 }
 function startLesson(id) {
   const lesson = lessonsWithReadiness().find(l => l.id === id);
@@ -484,12 +486,12 @@ function renderLesson(main) {
   const { lesson, index } = lessonRun;
   const header = `<div class="back-heading"><button class="icon-button" data-action="exit-lesson" aria-label="Back to quests">${icon('back')}</button><div><span class="eyebrow">Your quest</span><h2>${escape(lesson.title)}</h2></div>${coinLabel(store.getProfile().coins)}</div>`;
   if (index < 0) {
-    main.innerHTML = `${header}${questScene(lesson)}${questDialogue(lesson, lesson.quest?.intro)}<div class="card quest-pattern"><span class="eyebrow">One useful pattern</span><h2 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h2><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>${lesson.grammar.examples.map((ex, i) => `<div class="example-block"><div class="spoken-line"><div lang="ko" class="ko">${escape(ex.ko)}</div>${audioButton(ex.ko, `Hear example ${i + 1}`)}</div><p>${escape(ex.en)}</p></div>`).join('')}${button('lesson-next', 'Step into the story', 'full', 'arrow')}</div>`;
+    main.innerHTML = `${header}${questScene(lesson)}${questDialogue(lesson, lesson.quest?.intro)}<div class="card quest-pattern"><span class="eyebrow">Field notes · grammar</span><h2 class="grammar-title" lang="ko">${escape(lesson.grammar.title)}</h2><p class="grammar-text">${escape(lesson.grammar.explanation)}</p>${lesson.grammar.examples.map((ex, i) => `<div class="example-block"><div class="spoken-line"><div lang="ko" class="ko">${escape(ex.ko)}</div>${audioButton(ex.ko, `Hear example ${i + 1}`)}</div><p>${escape(ex.en)}</p></div>`).join('')}${button('lesson-next', 'Continue quest', 'full', 'arrow')}</div>`;
     return;
   }
   if (index >= lesson.challenges.length) {
     const completed = !!store.getLessonProgress()[lesson.id];
-    main.innerHTML = `${header}${questScene(lesson, { proud: true })}${questDialogue(lesson, lesson.quest?.outro)}<div class="card quest-finish"><span class="eyebrow">A small quest, well done</span><h2>You made a little progress.</h2><p class="muted space-top">${lessonRun.mistakes ? 'You worked through the tricky parts. You can visit again whenever you like.' : 'Every sentence found its place.'}</p><div class="quest-completion-reward">${completed ? `${icon('check')}<span>Revisited · first reward already collected</span>` : `${coinLabel(20)}<span>For your first completion</span>`}</div>${button('finish-lesson', completed ? 'Finish this visit' : 'Finish quest & collect 20 coins', 'full space-top', 'check')}</div>`;
+    main.innerHTML = `${header}${questScene(lesson, { proud: true })}${questDialogue(lesson, lesson.quest?.outro)}<div class="card quest-finish"><span class="eyebrow">Contract fulfilled</span><h2>Quest complete.</h2><p class="muted space-top">${lessonRun.mistakes ? 'All four challenges are complete. Your vocabulary is ready for further practice.' : 'Four challenges cleared. Collect your reward and check the board.'}</p><div class="quest-completion-reward">${completed ? `${icon('check')}<span>Revisited · first reward already collected</span>` : `${coinLabel(20)}<span>For your first completion</span>`}</div>${button('finish-lesson', completed ? 'Return to quest board' : 'Finish quest & collect 20 coins', 'full space-top', 'check')}</div>`;
     return;
   }
   const challenge = lesson.challenges[index];
@@ -500,7 +502,7 @@ function renderLesson(main) {
   const example = step?.after;
   main.innerHTML = `${header}${questScene(lesson, { small: true })}<div class="practice-head quest-progress"><span>Step ${index + 1} of ${lesson.challenges.length}</span><span>${escape(lesson.quest?.location || 'Around town')}</span></div><div class="progress-line"><span style="width:${index / lesson.challenges.length * 100}%"></span></div>${step?.text ? `<p class="quest-beat">${escape(step.text)}</p>` : ''}<h2 class="challenge-prompt">${escape(challenge.prompt)}</h2>${challenge.ko ? `<div class="spoken-line challenge-line"><p lang="ko" class="ko">${escape(challenge.ko)}</p>${audioButton(challenge.ko, 'Hear the question')}</div>` : ''}
     ${answerArea}
-    ${lessonRun.feedback ? `<div class="feedback ${lessonRun.feedback.correct ? '' : 'wrong'}" role="status"><strong>${lessonRun.feedback.correct ? 'You’ve got the idea.' : 'A useful thing to notice.'}</strong><p>${escape(challenge.explanation)}</p>${!lessonRun.feedback.correct ? `<p class="answer">${escape(challenge.answer)}</p>` : ''}${example?.ko ? `<div class="feedback-example"><span class="eyebrow">Say it out loud</span><div class="spoken-line"><p class="ko" lang="ko">${escape(example.ko)}</p>${audioButton(example.ko, 'Hear the model sentence')}</div><p>${escape(example.en)}</p></div>` : ''}</div>${button(lessonRun.feedback.correct ? 'lesson-next' : 'lesson-retry', lessonRun.feedback.correct ? 'Continue the story' : 'Try this one again', 'full space-top', 'arrow')}` : button('check-lesson', 'Check this sentence', 'full space-top', 'check')}`;
+    ${lessonRun.feedback ? `<div class="feedback ${lessonRun.feedback.correct ? '' : 'wrong'}" role="status"><strong>${lessonRun.feedback.correct ? 'Correct.' : 'Check the answer.'}</strong><p>${escape(challenge.explanation)}</p>${!lessonRun.feedback.correct ? `<p class="answer">${escape(challenge.answer)}</p>` : ''}${example?.ko ? `<div class="feedback-example"><span class="eyebrow">Say it out loud</span><div class="spoken-line"><p class="ko" lang="ko">${escape(example.ko)}</p>${audioButton(example.ko, 'Hear the model sentence')}</div><p>${escape(example.en)}</p></div>` : ''}</div>${button(lessonRun.feedback.correct ? 'lesson-next' : 'lesson-retry', lessonRun.feedback.correct ? 'Continue quest' : 'Try again', 'full space-top', 'arrow')}` : button('check-lesson', 'Check this sentence', 'full space-top', 'check')}`;
 }
 
 function checkLesson() {
@@ -528,12 +530,31 @@ function closeModal() {
 }
 function showSettings() {
   const settings = store.getSettings();
-  showModal('Your pocket notebook', `<div class="soft-note">Your vocabulary, review history and lessons are saved on this phone. Export a backup before moving to another phone or uninstalling.</div>
+  showModal('Settings', `<div class="soft-note">Your vocabulary, review history and lessons are saved on this phone. Export a backup before moving to another phone or uninstalling.</div>
     <section class="settings-section"><h3>Your pace</h3><label class="setting-row"><span>Daily review goal</span><select id="daily-goal">${[5, 10, 15, 20].map(n => `<option value="${n}" ${Number(settings.dailyGoal || 10) === n ? 'selected' : ''}>${n} words</option>`).join('')}</select></label><label class="setting-row"><span>Korean audio speed</span><select id="speech-rate">${[[0.75, 'Gentle'], [0.85, 'Natural'], [1, 'Full speed']].map(([n, name]) => `<option value="${n}" ${Number(settings.speechRate || 0.85) === n ? 'selected' : ''}>${name}</option>`).join('')}</select></label></section>
     <section class="settings-section"><h3>Korean on your phone</h3><p>Translation and handwriting need a one-time model download, roughly 50 MB together. This download can use your current mobile connection.</p><div class="setting-row"><span>Translation model</span><span class="status-badge ${capabilities.translationReady ? '' : 'pending'}">${capabilities.translationReady ? 'Ready' : 'Download needed'}</span></div><div class="setting-row"><span>Handwriting model</span><span class="status-badge ${capabilities.inkReady ? '' : 'pending'}">${capabilities.inkReady ? 'Ready' : 'Download needed'}</span></div>${button('prepare-model', 'Prepare both Korean models', 'secondary full space-top', 'download', 'data-model="all"')}<p>Speech recognition and spoken audio use your phone’s installed services. Speech may be processed online by that provider; no recordings are stored by this app. Offline language availability varies by phone.</p>${button('speech-settings', 'Phone speech settings', 'outline full small', 'settings')}${button('tts-settings', 'Korean voice settings', 'outline full small space-top', 'volume')}</section>
     <section class="settings-section"><h3>Keep your progress</h3><p>Backups contain your words, review history, quests, character, coins, and wardrobe. Import merges with your saved progress.</p><div class="button-row equal">${button('export-data', 'Export backup', 'outline small', 'download')}${button('import-data', 'Import backup', 'outline small', 'upload')}</div></section>
     <section class="settings-section"><h3>How words grow</h3><p><strong>Black:</strong> collected, not tested yet.<br><strong>Yellow:</strong> learning through recall.<br><strong>Green:</strong> successful reviews in both directions across multiple days. A miss brings a word back into learning.</p><p>Speech is vocabulary recall, not a pronunciation score. Typed answers count too. Lesson puzzles help understanding; they don’t automatically mark vocabulary mastered.</p></section>
-    <section class="settings-section"><h3>About Pocket Korean</h3><p>A personal language playground. Version ${escape(capabilities.version || '0.1.0')}. No app account or API key is needed.</p><p>Google Translate powers automatic translations via ML Kit. These are suggestions and may be incorrect. The app is independent of Google.</p><p><button class="inline-link" data-action="translation-notice">Translation attribution & disclaimer</button></p><p class="tiny">${isAndroid ? 'Your progress is local to this installation.' : 'Browser preview: handwriting checking, translation and microphone practice require the installed Android app.'}</p></section>`, 'settings');
+    <section class="settings-section"><h3>App updates</h3><p>Installed version: ${escape(capabilities.version || 'browser preview')}.</p>${button('show-updates', 'Get app updates', 'outline full small', 'download')}</section>
+    <section class="settings-section"><h3>About Pocket Korean</h3><p>Korean for the road ahead. Version ${escape(capabilities.version || '0.1.0')} · ${isAndroid ? capabilities.updateChannel === 'personal' ? 'Personal release' : 'Prototype' : 'Browser preview'}. No app account or API key is needed.</p><p>Google Translate powers automatic translations via ML Kit. These are suggestions and may be incorrect. The app is independent of Google.</p><p><button class="inline-link" data-action="translation-notice">Translation attribution & disclaimer</button></p><p class="tiny">${isAndroid ? 'Your progress is local to this installation.' : 'Browser preview: handwriting checking, translation and microphone practice require the installed Android app.'}</p></section>`, 'settings');
+}
+function showUpdates({ result = null, error = '', checking = false } = {}) {
+  const personal = capabilities.updateChannel === 'personal';
+  const status = checking ? '<div class="update-result" role="status"><span class="spinner"></span>Checking the latest release…</div>'
+    : error ? `<div class="inline-error" role="alert">${escape(error)}</div>`
+    : result ? `<div class="update-result" role="status"><strong>${!result.found ? 'No release has been published yet.' : result.available ? `Version ${escape(result.latestVersion)} is available.` : 'No newer release is available.'}</strong><p>${!result.found ? 'The first permanent release will appear here after signing is set up.' : result.available ? 'Download the installer, then open it on this phone.' : `Latest published release: ${escape(result.latestVersion)}.`}</p></div>` : '';
+  showModal('App updates', `<span class="eyebrow">Pocket Korean · ${escape(capabilities.version || 'browser preview')}</span><p class="quest-objective">Check for the latest public release. Downloads open in your phone’s browser.</p>${status}<div class="soft-note space-top">${personal ? 'Personal releases use a permanent app identity. Future releases from this setup can update the app and keep your progress.' : 'This is a prototype build. Export a backup before replacing it. Permanent update signing needs a one-time setup by the repository owner.'}</div>${result?.found && result?.available ? button('download-update', 'Download update', 'full space-top', 'download') : button('check-updates', checking ? 'Checking…' : 'Check for updates', 'full space-top', 'download', checking ? 'disabled' : '')}<div class="button-row equal space-top">${button('open-updates', 'All releases', 'outline small', 'arrow')}${button('export-data', 'Export backup', 'outline small', 'download')}</div>`, 'updates');
+}
+async function checkAppUpdates() {
+  const token = ++updateCheckToken;
+  showUpdates({ checking: true });
+  const revision = modalRevision;
+  try {
+    const result = await native('checkForUpdates');
+    if (token === updateCheckToken && modalKind === 'updates' && modalRevision === revision) showUpdates({ result });
+  } catch (error) {
+    if (token === updateCheckToken && modalKind === 'updates' && modalRevision === revision) showUpdates({ error: error.message || 'Could not check for updates. Try again when connected.' });
+  }
 }
 async function exportData() {
   try { await native('exportBackup', { content: store.exportData(), name: `pocket-korean-${new Date().toISOString().slice(0, 10)}.json` }); toast('Backup exported.'); }
@@ -545,10 +566,14 @@ async function importData() {
 }
 
 const actions = {
+  'show-updates': () => showUpdates(),
+  'check-updates': checkAppUpdates,
+  'download-update': () => native('openUpdates', { mode: 'download' }).catch(handleError),
+  'open-updates': () => native('openUpdates').catch(handleError),
   'home-section': el => { homeSection = ['room', 'shop', 'wardrobe'].includes(el.dataset.section) ? el.dataset.section : 'room'; if (route !== 'home') navigate('home'); else renderHome($('#main')); },
   'shop-slot': el => { if (!['hat', 'outfit', 'body'].includes(el.dataset.slot)) return; shopSlot = el.dataset.slot; renderHome($('#main')); },
-  'buy-item': el => { const result = safeMutation(() => store.buyItem(el.dataset.id)); if (!result) return; renderHome($('#main')); toast(result.purchased ? `${result.item.name} is yours. Looking good!` : 'Outfit updated.'); },
-  'equip-item': el => { if (!safeMutation(() => store.equipItem(el.dataset.id))) return; renderHome($('#main')); toast('Ready for your next adventure.'); },
+  'buy-item': el => { const result = safeMutation(() => store.buyItem(el.dataset.id)); if (!result) return; renderHome($('#main')); toast(result.purchased ? `${result.item.name} acquired and equipped.` : 'Outfit updated.'); },
+  'equip-item': el => { if (!safeMutation(() => store.equipItem(el.dataset.id))) return; renderHome($('#main')); toast('Availabler next adventure.'); },
   'rename-character': renameCharacter,
   'town-notebook': () => townNotebook(),
   'meet-character': el => townNotebook(el.dataset.id),
@@ -617,7 +642,7 @@ const actions = {
     if (!lessonRun || lessonRun.index < lessonRun.lesson.challenges.length) return;
     const saved = safeMutation(() => store.completeLesson(lessonRun.lesson.id));
     if (!saved) return;
-    lessonRun = null; render(); toast(saved.coinsEarned ? `Quest complete! +${saved.coinsEarned} coins. Something new awaits in the shop.` : 'A lovely return visit. Your progress is saved.');
+    lessonRun = null; render(); toast(saved.coinsEarned ? `Quest complete! +${saved.coinsEarned} coins. Spend them at the outfitter.` : 'Quest replay complete. Progress saved.');
   },
   'export-data': exportData,
   'import-data': importData,

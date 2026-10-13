@@ -1,50 +1,52 @@
-# A small Korean adventure that grows with your vocabulary
+# Korean practice at Greybridge Outpost
 
 ## The idea
 
-The learning area is a little town of short, connected situations. Your character meets a familiar cast while introducing yourself, ordering something, collecting a key, finding a place, and inviting a friend to play. Each adventure teaches one useful pattern and gives you four small puzzles to try it.
+Greybridge is a frontier outpost with dispatches to sort, gear to account for, and road crews waiting to leave. Your character takes on these errands through ten quests. Each has a named location, someone who needs a specific job done, and four Korean challenges that advance the scene.
 
 The first version uses an authored bank of 60 words and expressions across ten lessons. It recommends lessons using your actual vocabulary progress and completed adventures. This keeps the grammar bounded and reviewable while still letting the path respond to what you have practiced.
 
-The story treatment keeps **exactly the same ten initial quests**. These are light episodes about ordinary encounters, without a required overarching plot. The added opening, four story beats, and ending sit around the existing challenges; they do not add new learning requirements or reset progress.
+The presentation is stylized fantasy: a quartermaster with a loan ledger, a scout with a dispatch bag, an archive full of overdue returns, and a delver checking supplies before a watchtower contract. The cast speaks directly and has practical reasons to involve you. These are episodic jobs at one outpost; each stands on its own within the existing learning path.
 
-## The people in your town notebook
+There are **exactly ten initial quests**. Their stable IDs, Korean teaching content, answers, grammar, prerequisites, and saved progress remain in place. New English titles, scene narration, and selected prompt framing give the existing exercises a purpose in the setting. A completion resolves the current errand through its closing scene.
 
-The same five characters appear again across the ten quests. Their Korean names stay in 한글, and their roles and short biographies are explained in English. Each has a reusable geometric appearance, separate from the appearance you choose for your own character.
+## The people at camp
+
+The same five characters appear twice each across the ten quests. Their names stay in 한글, with English roles and biographies. Each has a distinct appearance, expression, and signature prop for the portrait renderer, independent of the appearance you choose for your own character.
 
 | Character | Role | Existing quests |
 | --- | --- | --- |
-| 다온 | Town keeper with spare maps and small practical errands | First hello; Inventory check |
-| 하루 | Courier who writes every route on a little card | Your name badge; A tiny plan |
-| 보리 | Café cook who always has room for another short conversation | Your café stop; Lunch break |
-| 소담 | Bookshop owner who labels almost everything | Find the café; Read the little signs |
-| 나래 | Friendly rival with a fondness for games and theatrical hats | Play together; Pack the next quest |
+| 다온 | Quartermaster; stern, ledger in hand, exact about borrowed gear | The Gate Ledger; The Stores Ledger |
+| 하루 | Scout; focused, compass at hand, unwilling to accept vague route details | Names on the Roster; Tomorrow’s Dispatch |
+| 보리 | Provisioner; skeptical, ladle ready, expects an honest food report | Orders at the Brass Kettle; Rations for the Road |
+| 소담 | Archivist; reserved, scroll in hand, remembers every missing return | The Backstreet Route; The Unmarked Return |
+| 나래 | Delver; a competing adventurer with a sword and a methodical approach to supplies | A Seat at the Table; Before the North Gate |
 
-The Town notebook can show each portrait, biography, and links to these existing quests. Returning to a character gives the practice a familiar setting without creating additional quests.
+The cast notebook at camp can show each portrait, biography, and links to these existing quests. The quest board groups the opening bank as Chapter I. Returning to a character keeps the setting familiar and brings you back to the same learning requirements.
 
 ## A useful first session
 
-1. Start with **First hello**. Listen to the examples and complete its four choices. Your starter list already contains the seven words and phrases you practiced before, but their mastery starts unscored.
+1. Start with **The Gate Ledger**. Meet the quartermaster, listen to the examples, and complete its four choices. Your starter list already contains the seven words and phrases you practiced before, but their mastery starts unscored.
 2. Open **Speak** and recall a few words in both directions. Korean stays in Korean script. In the English-to-Korean direction, dictionary-form verbs such as 자다 are practiced separately from the polite forms used in sentences.
-3. Try **Your name badge** or **Your café stop** when their prerequisites are ready. Each lesson adds its useful vocabulary to your list for later practice.
+3. Try **Names on the Roster** or **Orders at the Brass Kettle** when their prerequisites are ready. Each lesson adds its useful vocabulary to your list for later practice.
 4. Open a word to hear its normal Korean spelling, inspect a Korean-script pronunciation hint when one is available, and read its example. Use **Write** for a short drawing break.
 
-The aim is a small complete interaction, rather than a long list of isolated facts. A lesson can be revisited whenever you want. Its puzzles teach understanding; separate vocabulary recall builds the evidence for mastery.
+The aim is to finish a useful interaction. A lesson can be revisited whenever you want. Its puzzles teach understanding; separate vocabulary recall builds the evidence for mastery.
 
 ## The first ten adventures
 
-| Adventure | What you can do | Main pattern |
+| Quest | Job at the outpost | Main pattern |
 | --- | --- | --- |
-| First hello | Greet, thank, and apologize politely | 안녕하세요 · 감사합니다 · 죄송해요 |
-| Your name badge | Identify yourself and say where you are from | 저는 …이에요 / …예요 |
-| Your café stop | Request a drink or something to eat | 물 주세요 |
-| Inventory check | Say what you have and what is missing | 열쇠가 있어요 · 검이 없어요 |
-| Find the café | Ask and answer a simple location question | 어디에 있어요? |
-| Lunch break | Say what you eat or drink | 밥을 먹어요 · 물을 마셔요 |
-| A tiny plan | Give a time and a destination | 오늘 집에 가요 |
-| Play together | Invite a friend to play | 같이 게임을 해요 |
-| Read the little signs | Ask what something is and describe your learning | 이거 뭐예요? · 한국어를 배워요 |
-| Pack the next quest | Request or count one or two items | 한 개 · 두 개 |
+| The Gate Ledger | Borrow a route map from the quartermaster at Greybridge Gatehouse | 안녕하세요 · 감사합니다 · 죄송해요 |
+| Names on the Roster | Register a clear introduction for the scout’s dispatches at Rook Post | 저는 …이에요 / …예요 |
+| Orders at the Brass Kettle | Collect the waiting road crew’s drinks without mixing up the orders | 물 주세요 |
+| The Stores Ledger | Check loaned equipment against the quartermaster’s records | 열쇠가 있어요 · 검이 없어요 |
+| The Backstreet Route | Trace the café contact holding an overdue archive packet | 어디에 있어요? |
+| Rations for the Road | Test a departure meal and report to the provisioner | 밥을 먹어요 · 물을 마셔요 |
+| Tomorrow’s Dispatch | Sort route and rest updates before the scout seals the bag | 오늘 집에 가요 |
+| A Seat at the Table | Set up a game with the delver while the contract board is closed | 같이 게임을 해요 |
+| The Unmarked Return | Identify a returned object for the Lantern Archive’s catalogue | 이거 뭐예요? · 한국어를 배워요 |
+| Before the North Gate | Check provisions and keys for the delver’s watchtower inspection | 한 개 · 두 개 |
 
 Introductions and the café form the early branches. They feed into the inventory and lunch lessons. From there, the path opens into locations, plans, playing together, language questions, and packing supplies. Required earlier lessons keep grammar introductions in a sensible order.
 
@@ -57,6 +59,14 @@ A lesson vocabulary prerequisite accepts a word you have begun learning or alrea
 The lesson puzzles accept explicitly listed grammatical alternative word orders. The primary example remains an uncomplicated beginner model; some accepted alternatives change emphasis. Korean does not have only one valid order for every sentence.
 
 Each challenge now has a brief situation in English, followed by a model Korean line after the answer is checked. The model line is practice dialogue and may be the learner's own line, rather than something the other character says. Opening dialogue avoids giving a quiz answer together with its translation. The first greeting quest opens with narration alone, because that conversation is what the learner is about to practice.
+
+The fantasy setting changes the reason for an exchange, not the meaning of its Korean. The Brass Kettle includes a café, the dispatch exercise still refers to a school and home, and the delver’s table activity is a game. English flavour dialogue is authored fiction; its wording is separate from each displayed Korean line and that line’s translation.
+
+## What the adventure layer implements
+
+Chapter I supplies a fixed opening scene, four challenge-aligned story beats, and a closing scene for each quest. Five reusable portraits provide the recurring cast. Lesson progress and vocabulary progress determine what is available on the quest board.
+
+Gear, dispatches, meals, and contracts provide the fictional context. This version tracks learning progress; it does not simulate a second inventory, combat, travel, or branching contract system. Further chapters can reuse the cast and prerequisites after their Korean content has been written and checked.
 
 ## Your own vocabulary
 

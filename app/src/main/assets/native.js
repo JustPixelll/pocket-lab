@@ -38,6 +38,12 @@ export async function native(action, payload = {}) {
 async function browserService(action, payload) {
   if (action === 'capabilities') return { platform: 'browser', speechAvailable: false, onDeviceSpeechAvailable: false, ttsReady: !!window.speechSynthesis, translationReady: false, inkReady: false, version: 'browser preview' };
   if (action === 'stopListening' || action === 'stopSpeaking') { window.speechSynthesis?.cancel(); return {}; }
+  if (action === 'checkForUpdates') throw new ServiceError('ANDROID_REQUIRED', 'Version checks are available in the installed Android app. You can open All releases here.');
+  if (action === 'openUpdates') {
+    const url = payload.mode === 'download' ? 'https://github.com/JustPixelll/pocket-lab/releases/latest/download/Pocket-Korean.apk' : 'https://github.com/JustPixelll/pocket-lab/releases';
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return { opened: true };
+  }
   if (action === 'speak') {
     if (!window.speechSynthesis) throw new ServiceError('TTS_UNAVAILABLE', 'Audio is available in the Android app when a Korean voice is installed.');
     const utterance = new SpeechSynthesisUtterance(payload.text);

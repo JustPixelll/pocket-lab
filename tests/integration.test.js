@@ -113,7 +113,7 @@ function application() {
 
 test('app initializes its real store and typed submission saves matching UI progress', async () => {
   const app = application();
-  assert.ok(app.node('#main').innerHTML.includes('A little Korean, every day.'));
+  assert.ok(app.node('#main').innerHTML.includes('Camp.'));
   assert.equal(app.store.getCards().length, 12);
   assert.ok(app.store.getCards().every(card => card.status === 'new'));
   app.action('practice-word', { id: 'thanks' });
@@ -359,7 +359,7 @@ test('finishing a quest awards once and the character shop uses those saved coin
   assert.equal(app.store.getProfile().equipment.hat, 'hat-beanie');
   app.action('buy-item', { id: 'hat-beanie' });
   assert.equal(app.store.getProfile().totalSpent, 20);
-  assert.ok(app.node('#main').innerHTML.includes('Wearing'));
+  assert.ok(app.node('#main').innerHTML.includes('Equipped'));
 });
 
 test('failed cosmetic persistence leaves the character and its coins unchanged', () => {
@@ -389,4 +389,56 @@ test('handwriting service errors stay visible and preserve the actual strokes', 
   assert.ok(app.getWriting().feedback.includes('The handwriting service needs attention.'));
   assert.ok(app.getWriting().feedback.includes('Prepare handwriting model'));
   assert.ok(!app.getWriting().feedback.includes('Here’s what your phone could read.'));
+});
+
+
+test('update checks preserve learning state and route download through the fixed native action', async () => {
+  const app = application();
+  const before = app.store.exportData();
+  const calls = [];
+  app.native(async (action, payload) => {
+    calls.push({ action, payload });
+    if (action === 'checkForUpdates') return { found: true, available: true, latestVersion: '0.1.99' };
+    return { opened: true };
+  });
+  await app.action('check-updates');
+  assert.ok(app.node('#modal-root').innerHTML.includes('0.1.99'));
+  assert.ok(app.node('#modal-root').innerHTML.includes('Download update'));
+  await app.action('download-update');
+  assert.equal(calls.at(-1).action, 'openUpdates');
+  assert.deepEqual(cloneInput(calls.at(-1).payload), { mode: 'download' });
+  assert.equal(app.store.exportData(), before);
+});
+
+test('a delayed update response cannot replace a word form or a later update check', async () => {
+  const app = application();
+  const first = deferred();
+  app.native(async action => action === 'checkForUpdates' ? first.promise : {});
+  const check = app.action('check-updates');
+  app.wordForm();
+  first.resolve({ found: true, available: true, latestVersion: '0.1.99' });
+  await check;
+  assert.ok(app.node('#modal-root').innerHTML.includes('word-form'));
+  assert.ok(!app.node('#modal-root').innerHTML.includes('0.1.99'));
+  const old = deferred(), current = deferred();
+  let count = 0;
+  app.native(async action => action === 'checkForUpdates' ? (++count === 1 ? old.promise : current.promise) : {});
+  const olderCheck = app.action('check-updates');
+  const latestCheck = app.action('check-updates');
+  current.resolve({ found: false, available: false });
+  await latestCheck;
+  old.resolve({ found: true, available: true, latestVersion: '0.1.99' });
+  await olderCheck;
+  assert.ok(app.node('#modal-root').innerHTML.includes('No release has been published yet.'));
+  assert.ok(!app.node('#modal-root').innerHTML.includes('0.1.99'));
+});
+
+test('an update network error leaves a retry and all saved data intact', async () => {
+  const app = application();
+  const before = app.store.exportData();
+  app.native(async action => { if (action === 'checkForUpdates') throw new Error('Network unavailable'); return {}; });
+  await app.action('check-updates');
+  assert.ok(app.node('#modal-root').innerHTML.includes('Network unavailable'));
+  assert.ok(app.node('#modal-root').innerHTML.includes('data-action="check-updates"'));
+  assert.equal(app.store.exportData(), before);
 });

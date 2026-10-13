@@ -16,7 +16,7 @@ These tests require no installed npm packages. They cover vocabulary scheduling 
 node tests/ui-smoke.mjs
 ```
 
-The script uses an existing Playwright installation and Chromium browser. It starts its own temporary server on localhost, opens a fresh browser context, checks all six tabs at 320/390/768 pixels, verifies typed-recall persistence, saves/searches/opens a custom word, completes and revisits the first quest, buys a hat and checks persistence, verifies independent quest-audio controls, and requires no uncaught page errors. It also saves twelve screenshots, by default in `docs/screenshots`. Its server and browser are closed when the run finishes or fails.
+The script uses an existing Playwright installation and Chromium browser. It starts its own temporary server on localhost, opens a fresh browser context, checks all six tabs at 320/390/768 pixels, verifies typed-recall persistence, saves/searches/opens a custom word, completes and revisits the first quest, buys a hat and checks persistence, verifies independent quest-audio controls, opens the contact codex, and checks the browser's update-screen fallback. It requires no uncaught page errors and saves fourteen screenshots, by default in `docs/screenshots`. Its server and browser are closed when the run finishes or fails.
 
 Playwright is optional QA tooling and is not a production dependency. Use these environment variables to supply tooling installed elsewhere:
 
@@ -53,7 +53,16 @@ The adjacent `BUILD-TYPE.txt` must identify a disposable debug build. The check 
 
 This gate does not request a microphone permission, download models, or perform translation, ink recognition, or spoken audio. Those services can correctly report unavailable on a fresh emulator. Stable release builds disable WebView debugging, so this specific debug gate explicitly skips them; it does not mark them as device-tested.
 
-## Character and quest update verification
+## Greybridge adventure and public-update revision
+
+- **Logic and integration:** 85 tests pass. Coverage includes vocabulary scheduling, old-backup migration, permanent quest/mastery rewards, atomic purchases, idempotent imports, failed-save recovery, independent quest-audio controls, update-check errors, and late update responses that must not replace another dialog.
+- **Browser:** 31 checks pass, with zero uncaught page errors. All six tabs fit at 320/390/768 pixels; the outfitter and equipment views also fit at the narrow and wide sizes. The first quest awards 20 coins, its replay awards none, and a purchased/equipped wool cap survives reopening and appears in quest scenes. The codex and update fallback remain usable.
+- **Visual review:** camp, quest board, outfitter, and codex screenshots were inspected. The revised SVG cast uses distinct role silhouettes, expressions, layered clothing, and signature equipment. Camp and contract scenes include original forest, gatehouse, archive, and interior backdrops.
+- **Content and saved data:** exactly ten quests, forty challenges, and five recurring characters. Existing lesson/challenge IDs, prerequisites, all sixty vocabulary entries, grammar, Korean dialogue/translations, and challenge answer sets remain unchanged. Cosmetic IDs, prices, slots, defaults, and receipt contracts are preserved. No Korean romanization was added.
+- **Updates:** the repository is public. Explicit update checks use its fixed public release endpoint; downloads open in the system browser. The workflow verifies the APK's package, version, checksum, and public signing-certificate fingerprint, and publishes only personal builds from trusted `main` runs. Owner setup for permanent signing has not been executed. The release-publication path therefore remains unverified until that setup is complete; see [personal updates](personal-updates.md).
+- **Native build:** pending for this revision. Browser stubs and logic tests do not establish the new native GitHub request or an APK installation on the owner's phone.
+
+## Previous character and quest update: v0.1.7
 
 - **Logic and integration:** 81 tests pass, including old-backup migration, permanent quest/mastery rewards, atomic purchases, idempotent imports, failed-save recovery, and independent quest-audio controls.
 - **Browser:** 29 checks pass, with zero uncaught page errors. All six tabs fit at 320/390/768 pixels; shop and wardrobe also fit at the narrow and wide sizes. The first quest awards 20 coins, its replay awards none, and a purchased/equipped beanie survives reopening and appears in quest scenes.
@@ -62,7 +71,8 @@ This gate does not request a microphone permission, download models, or perform 
 - **Native build and Android lint:** passed in [build run 38323819134](https://github.com/JustPixelll/pocket-lab/actions/runs/38323819134). The same run passed all 81 Node tests.
 - **Installer:** version `0.1.7`, built from `049b547b253d608ff417178bad30f6e622ad5030`, with disposable debug signing. `Pocket-Korean.apk` is 96,840,987 bytes; SHA-256 `5fd7e04bbc36013d449837b59ea18bd198e166c24ad13594245d2fd680d42457`.
 - **Download integrity:** the artifact ZIP SHA-256 matched GitHub's `78a0985731e8c1feb647d0d025ccdc6d328aec6b7067dd9a0a1f4e7ae1c59b1d`. The extracted APK matched the build's checksum file. All eight changed app assets match the tested source byte for byte, and the packaged attribution image matches the build artifact.
-- **Android emulator:** the automatic [startup smoke run 38323969517](https://github.com/JustPixelll/pocket-lab/actions/runs/38323969517) was still running at the installer handoff (2026-10-12 23:49 UTC). It is not included in the pass claims above. Browser checks and the exact-SDK builder regression do not establish recognition of a finger drawing or Korean voice playback on a phone.
+- **Android emulator:** the automatic [startup smoke run 38323969517](https://github.com/JustPixelll/pocket-lab/actions/runs/38323969517) was still running at the installer handoff (2026-10-12 23:49 UTC). It is not included in the pass claims above.
+- **Actual phone:** after installing v0.1.7, the owner reported that everything works as intended. This is real-device feedback for that version, including the previously reported native-service problems. It does not establish device behavior for subsequent revisions.
 
 ## Previous installed prototype
 
@@ -74,4 +84,4 @@ The earlier [Android smoke run 38317169219](https://github.com/JustPixelll/pocke
 
 ## Phone follow-up
 
-After exporting an old backup and installing the new test APK, import the backup if replacing it required uninstalling. Check a finger-drawn syllable after the Korean handwriting model is downloaded; Korean quest audio after installing a Korean TTS voice; and Korean/English microphone transcription using the phone's speech provider. The updated speech fallback permits the provider to use its supported language service when on-device recognition reports a missing language. Translation quality and offline operation still require checks on the actual phone.
+Export a backup before replacing a disposable prototype. If installation requires uninstalling, import the backup afterward and prepare the language models again. The owner has already confirmed that the v0.1.7 handwriting, speech, audio, and other features work; this revision preserves those services. On the new revision, confirm the camp/contract presentation and explicit update-check result. A successful first permanent release and a later update signed with the same identity are needed to establish the new end-to-end update path on the phone.

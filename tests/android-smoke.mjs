@@ -434,7 +434,7 @@ try {
   report.ui = await checkpoint('home-dom-ready', () => until('Home DOM', async () => {
     const state = await evaluate(uiSnapshot);
     report.lastUi = state;
-    return state?.heading === 'Home, little adventurer.'
+    return state?.heading === 'Camp.'
       && state.navigation.length === 6 && state.visible && state.cssLoaded
       && state.bridgePresent && state.appStarted && state.rootFrame
       && state.roots.app === 1 && state.roots.main === 1 && state.roots.nav === 1
@@ -506,7 +506,7 @@ try {
     report.wordsUi = await checkpoint('words-route-dom', () => until('Words route after real tap', async () => {
       const state = await evaluate(uiSnapshot);
       report.lastUi = state;
-      return state?.url === appUrl + '#words' && state.heading === 'Your word garden.'
+      return state?.url === appUrl + '#words' && state.heading === 'Vocabulary.'
         && state.activeNavigation === 'Words' && state.visible && state.loadingNodes === 0
         ? state : null;
     }));
